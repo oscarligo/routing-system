@@ -160,16 +160,16 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 
 ## 8. Estructura del Repositorio
 
-El repositorio contiene el planteamiento anterior y el esqueleto de directorios.
-Los únicos archivos agregados al esqueleto son `.gitkeep` vacíos, que permiten
-versionar las carpetas con Git. Los archivos de implementación descritos más
-abajo están **previstos y todavía no existen**; tampoco hay dependencias,
-contenedor ni comandos de ejecución configurados.
+El repositorio contiene el planteamiento, el núcleo MiniZinc y una instancia
+sintética ejecutable (fase 1). Los `.gitkeep` conservan las carpetas reservadas.
+La capa Python, los perfiles, las reglas modulares, las dependencias y el
+contenedor siguen pendientes. La sección 9 describe la ejecución disponible.
 
 ```text
 routing-system/
 ├── README.md
 ├── models/
+│   ├── hfvrptw_core.mzn
 │   ├── rules/
 │   │   └── .gitkeep
 │   ├── extensions/
@@ -191,12 +191,17 @@ routing-system/
 │   ├── cache/
 │   │   └── .gitkeep
 │   └── instances/
+│       ├── toy_10nodes.dzn
 │       └── .gitkeep
 └── experiments/
+    ├── check_phase1.sh
     └── .gitkeep
 ```
 
-### 8.1. Archivos Previstos y Responsabilidades
+### 8.1. Archivos y Responsabilidades
+
+`models/hfvrptw_core.mzn` ya está implementado; los demás archivos de esta
+tabla corresponden a fases posteriores.
 
 | Ruta prevista | Responsabilidad |
 | :--- | :--- |
@@ -233,8 +238,8 @@ cuando se implementen los modelos y se configuren los motores.
 
 ### 8.3. Guía de Uso
 
-En esta etapa se puede explorar la estructura y consultar el planteamiento;
-no hay todavía una aplicación ejecutable. Al implementar cada componente,
+En esta etapa se ejecuta directamente MiniZinc como se indica en la sección 9;
+la aplicación Python sigue pendiente. Al implementar cada componente,
 su código se ubicará en la ruta prevista de la tabla y se podrá retirar el
 `.gitkeep` de esa carpeta cuando contenga archivos versionados.
 
@@ -248,3 +253,90 @@ El flujo de uso previsto es:
 
 Los comandos de instalación, ejecución de la CLI y construcción del contenedor
 se documentarán cuando existan `pyproject.toml`, `src/cli.py` y `Dockerfile`.
+
+## 9. Fase 1: Núcleo Matemático con Datos Sintéticos
+
+### 9.1. Alcance y Convenciones
+
+`models/hfvrptw_core.mzn` implementa rutas con `subcircuit`, cobertura única,
+capacidades heterogéneas, ventanas rígidas para el **inicio** del servicio,
+espera permitida y carga de vehículos mediante `cumulative`. Cada vehículo
+activo tiene un único ciclo que incluye el depósito; los nodos no asignados
+son bucles a sí mismos. Los vehículos inactivos no consumen muelles ni pagan
+costos. El objetivo es costo fijo de activación más distancia por tarifa de
+cada vehículo, con cotas enteras finitas para los tres motores.
+
+El depósito es el nodo **0** y los clientes son `1..n_customers`. Se conservan
+esos índices al construir el array de `subcircuit`. La salida ocurre al terminar
+la carga; salida y regreso tienen variables distintas para no imponer una
+precedencia temporal circular. La ventana del depósito contiene toda la carga
+y el regreso. `return_time` representa una hora factible de regreso y puede
+incluir espera; el objetivo no minimiza horarios. Los intervalos de ocupación
+de muelles son `[loading_start, departure)`.
+
+La instancia `data/instances/toy_10nodes.dzn` tiene **11 nodos: un depósito y
+10 clientes**, pese al nombre solicitado. Incluye dos muelles, tres vehículos
+con capacidades `[8, 9, 12]`, costos y duraciones de carga diferentes, y matrices
+asimétricas inventadas. Por simplicidad, distancia y tiempo tienen los mismos
+valores en esta instancia, pero son parámetros independientes del modelo.
+Los tiempos se expresan en minutos desde la apertura. Las ventanas estrechas
+facilitan una primera validación; este caso no mide escalabilidad.
+
+### 9.2. Ejecutar en MiniZinc IDE
+
+1. Abrir `models/hfvrptw_core.mzn` y `data/instances/toy_10nodes.dzn` en MiniZinc IDE.
+2. Mantener activo el `.mzn`, pulsar **Run** y seleccionar el `.dzn` cuando lo solicite.
+3. Configurar **un hilo** en las opciones de ejecución para reproducir la medición.
+4. Ejecutar cambiando el selector entre **Gecode**, **HiGHS** y **OR Tools CP-SAT**, con el mismo modelo y datos.
+5. Comprobar `total_cost = 247;` y el marcador `==========`, que indica óptimo demostrado. Los horarios pueden diferir entre solvers.
+
+No hacen falta archivos de perfil `.mpc` ni Python. Si el IDE no encuentra el
+motor, revisar su instalación y las configuraciones listadas por `minizinc --solvers`.
+
+### 9.3. Ejecutar y Verificar por Consola
+
+Con `minizinc` en el `PATH`:
+
+```sh
+minizinc --solver gecode --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
+minizinc --solver highs --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
+minizinc --solver cp-sat --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
+sh experiments/check_phase1.sh
+```
+
+En macOS puede usarse directamente el ejecutable incluido en el IDE:
+
+```sh
+MINIZINC=/Applications/MiniZincIDE.app/Contents/Resources/minizinc sh experiments/check_phase1.sh
+```
+
+El verificador requiere `sh`, `rg`, `awk`, `sed` y `/usr/bin/time`. Comprueba el
+mismo óptimo demostrado en los tres motores y un tiempo total de proceso menor
+a dos segundos por motor, incluyendo compilación y arranque. Además comprueba
+con Gecode que reducir la capacidad total a 28 (demanda 29) o los muelles a uno
+hace inviable esta instancia. Los datos modificados se crean temporalmente.
+
+### 9.4. Resultado de Validación
+
+Medición por consola el 19 de noviembre de 2026 en macOS ARM64, MiniZinc 2.11.0,
+un hilo por motor. El modelo y la instancia también se abrieron en el IDE;
+no se automatizó el selector de su interfaz gráfica.
+
+| Solver | Versión | Óptimo demostrado | Tiempo total de proceso |
+| :--- | :--- | ---: | ---: |
+| Gecode | 6.6.0 | 247 | 0,60 s |
+| HiGHS | 1.16.0 | 247 | 1,39 s |
+| OR-Tools CP-SAT | 9.15 | 247 | 0,24 s |
+
+Las rutas obtenidas fueron `0 → 1 → 2 → 3 → 4 → 0`,
+`0 → 5 → 6 → 7 → 0` y `0 → 8 → 9 → 10 → 0` para los vehículos 1, 2 y 3.
+Sus cargas son 8, 9 y 12; sus distancias, 26, 25 y 29. El costo se verifica como
+`20 + 30 + 40 + 3×26 + 2×25 + 1×29 = 247`.
+Un horario factible carga los vehículos en `[0,8)`, `[0,10)` y `[8,20)`:
+se ocupan como máximo dos muelles y los servicios pueden comenzar en las
+aperturas de las ventanas de todos los clientes.
+
+Los tiempos dependen del equipo, la carga y la configuración de hilos. Una
+medición preliminar con hilos predeterminados dio 2,93 s para HiGHS; por eso la
+configuración de un hilo forma parte de la reproducción del criterio. Este
+resultado no garantiza el umbral de dos segundos para otras instancias.
