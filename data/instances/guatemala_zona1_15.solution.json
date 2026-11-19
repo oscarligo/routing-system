@@ -1,0 +1,152 @@
+{
+  "instance": "data/instances/guatemala_zona1_15.json",
+  "instance_sha256": "8334bb7b6aae92c98282787e550f9d6184559ebdfd931e0d998f67c1c65f263b",
+  "solver": "cp-sat",
+  "solver_version": "9.15",
+  "status": "OPTIMAL_SOLUTION",
+  "has_solution": true,
+  "optimal": true,
+  "elapsed_seconds": 2.6499,
+  "statistics": {
+    "paths": 0,
+    "flatBoolVars": 1080,
+    "flatIntVars": 171,
+    "flatBoolConstraints": 774,
+    "flatIntConstraints": 1204,
+    "evaluatedReifiedConstraints": 51,
+    "evaluatedHalfReifiedConstraints": 1035,
+    "eliminatedImplications": 9,
+    "method": "minimize",
+    "flatTime": 0.069109,
+    "objective": 16022,
+    "objectiveBound": 16022,
+    "boolVariables": 1998,
+    "failures": 76,
+    "propagations": 3520305,
+    "solveTime": 2.48425,
+    "time": 2.513,
+    "nSolutions": 39
+  },
+  "total_cost": 16022,
+  "successor": [
+    [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    [
+      1,
+      2,
+      3,
+      7,
+      0,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    [
+      8,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      9,
+      11,
+      13,
+      10,
+      0,
+      15,
+      12,
+      14
+    ]
+  ],
+  "used": [
+    false,
+    true,
+    true
+  ],
+  "start_service": [
+    15,
+    20,
+    25,
+    55,
+    50,
+    45,
+    40,
+    70,
+    75,
+    86,
+    81,
+    117,
+    100,
+    111,
+    106
+  ],
+  "loading_start": [
+    0,
+    0,
+    0
+  ],
+  "departure": [
+    0,
+    7,
+    9
+  ],
+  "return_time": [
+    0,
+    60,
+    123
+  ],
+  "routes": [
+    [
+      0
+    ],
+    [
+      0,
+      1,
+      2,
+      3,
+      7,
+      6,
+      5,
+      4,
+      0
+    ],
+    [
+      0,
+      8,
+      9,
+      11,
+      10,
+      13,
+      15,
+      14,
+      12,
+      0
+    ]
+  ]
+}

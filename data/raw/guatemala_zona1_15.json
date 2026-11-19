@@ -1,0 +1,29 @@
+{
+  "description": "Demostración de 15 entregas en coordenadas de Ciudad de Guatemala, zona 1. Coordenadas propuestas para snapping vial; no son pedidos de comercios reales. Demandas, ventanas, servicio y flota son sintéticos. Minutos desde apertura; costos en unidades abstractas por metro.",
+  "network_bbox": [-90.527, 14.633, -90.506, 14.653],
+  "n_docks": 2,
+  "horizon": 240,
+  "vehicles": [
+    {"capacity": 6, "fixed_cost": 1000, "distance_cost": 3, "loading_duration": 5},
+    {"capacity": 7, "fixed_cost": 1200, "distance_cost": 2, "loading_duration": 7},
+    {"capacity": 8, "fixed_cost": 1500, "distance_cost": 1, "loading_duration": 9}
+  ],
+  "nodes": [
+    {"id": "depot", "lat": 14.6395, "lon": -90.5220, "demand": 0, "earliest": 0, "latest": 240, "service": 0},
+    {"id": "C01", "lat": 14.6395, "lon": -90.5190, "demand": 1, "earliest": 15, "latest": 35, "service": 4},
+    {"id": "C02", "lat": 14.6395, "lon": -90.5160, "demand": 1, "earliest": 15, "latest": 35, "service": 4},
+    {"id": "C03", "lat": 14.6395, "lon": -90.5130, "demand": 1, "earliest": 15, "latest": 35, "service": 4},
+    {"id": "C04", "lat": 14.6420, "lon": -90.5220, "demand": 1, "earliest": 40, "latest": 65, "service": 4},
+    {"id": "C05", "lat": 14.6420, "lon": -90.5190, "demand": 1, "earliest": 40, "latest": 65, "service": 4},
+    {"id": "C06", "lat": 14.6420, "lon": -90.5160, "demand": 1, "earliest": 40, "latest": 65, "service": 4},
+    {"id": "C07", "lat": 14.6420, "lon": -90.5130, "demand": 1, "earliest": 40, "latest": 65, "service": 4},
+    {"id": "C08", "lat": 14.6445, "lon": -90.5220, "demand": 1, "earliest": 70, "latest": 95, "service": 4},
+    {"id": "C09", "lat": 14.6445, "lon": -90.5190, "demand": 1, "earliest": 70, "latest": 95, "service": 4},
+    {"id": "C10", "lat": 14.6445, "lon": -90.5160, "demand": 1, "earliest": 70, "latest": 95, "service": 4},
+    {"id": "C11", "lat": 14.6445, "lon": -90.5130, "demand": 1, "earliest": 70, "latest": 95, "service": 4},
+    {"id": "C12", "lat": 14.6470, "lon": -90.5220, "demand": 1, "earliest": 100, "latest": 125, "service": 4},
+    {"id": "C13", "lat": 14.6470, "lon": -90.5190, "demand": 1, "earliest": 100, "latest": 125, "service": 4},
+    {"id": "C14", "lat": 14.6470, "lon": -90.5160, "demand": 1, "earliest": 100, "latest": 125, "service": 4},
+    {"id": "C15", "lat": 14.6470, "lon": -90.5130, "demand": 1, "earliest": 100, "latest": 125, "service": 4}
+  ]
+}

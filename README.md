@@ -162,13 +162,15 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 
 El repositorio contiene el planteamiento, el núcleo MiniZinc y una instancia
 sintética ejecutable (fase 1), más reglas modulares de zonas y descansos
-(fase 2). Los `.gitkeep` conservan las carpetas reservadas.
-La capa Python, los perfiles, la cadena de frío, las dependencias y el
-contenedor siguen pendientes. La sección 9 describe la ejecución disponible.
+(fase 2), y el pipeline geoespacial Python + OpenStreetMap (fase 3).
+Los `.gitkeep` conservan las carpetas reservadas. Los perfiles, la cadena de
+frío, el clustering, la visualización y el contenedor siguen pendientes.
+Las secciones 9–11 describen la ejecución disponible.
 
 ```text
 routing-system/
 ├── README.md
+├── pyproject.toml
 ├── models/
 │   ├── hfvrptw_core.mzn
 │   ├── hfvrptw_rules.mzn
@@ -181,39 +183,51 @@ routing-system/
 │   └── profiles/
 │       └── .gitkeep
 ├── src/
+│   ├── cli.py
 │   ├── geo/
+│   │   ├── osm_extractor.py
+│   │   ├── matrix_builder.py
 │   │   └── .gitkeep
 │   ├── decomposition/
 │   │   └── .gitkeep
 │   ├── solver/
+│   │   ├── mzn_runner.py
 │   │   └── .gitkeep
 │   └── viz/
 │       └── .gitkeep
 ├── data/
 │   ├── raw/
+│   │   ├── guatemala_zona1_15.json
 │   │   └── .gitkeep
 │   ├── cache/
 │   │   └── .gitkeep
 │   └── instances/
+│       ├── guatemala_zona1_15.json
+│       ├── guatemala_zona1_15.geo.json
+│       ├── guatemala_zona1_15.solution.json
 │       ├── toy_10nodes.dzn
 │       ├── toy_rules_10nodes.dzn
 │       ├── toy_rules_config.dzn
 │       └── .gitkeep
-└── experiments/
-    ├── check_phase1.sh
-    ├── check_phase2.sh
-    └── .gitkeep
+├── experiments/
+│   ├── check_phase1.sh
+│   ├── check_phase2.sh
+│   └── .gitkeep
+└── tests/
+    └── test_geospatial.py
 ```
 
 ### 8.1. Archivos y Responsabilidades
 
 `models/hfvrptw_core.mzn`, `models/rules/zone_restrictions.mzn` y
-`models/rules/driver_breaks.mzn` ya están implementados; los demás archivos
-de esta tabla corresponden a fases posteriores.
+`models/rules/driver_breaks.mzn` ya están implementados. También existen
+`pyproject.toml`, `src/cli.py`, los módulos de `src/geo/` y
+`src/solver/mzn_runner.py`; los demás archivos de esta tabla corresponden a
+fases posteriores. El árbol omite los archivos Python `__init__.py`.
 
 | Ruta prevista | Responsabilidad |
 | :--- | :--- |
-| `pyproject.toml` | Declarar las dependencias de Python: minizinc, osmnx, networkx y folium. |
+| `pyproject.toml` | Dependencias de Python: minizinc, osmnx, networkx, folium y scikit-learn para snapping geográfico. |
 | `Dockerfile` | Proveer un entorno reproducible con MiniZinc, Gecode, HiGHS y OR-Tools. |
 | `models/hfvrptw_core.mzn` | Núcleo declarativo agnóstico del solver: rutas con `subcircuit`, capacidad de muelles con `cumulative` y ventanas de tiempo. |
 | `models/rules/zone_restrictions.mzn` | Restricciones modulares de compatibilidad vehículo-zona, como acceso de carga pesada. |
@@ -246,8 +260,8 @@ cuando se implementen los modelos y se configuren los motores.
 
 ### 8.3. Guía de Uso
 
-En esta etapa se ejecuta directamente MiniZinc como se indica en la sección 9;
-la aplicación Python sigue pendiente. Al implementar cada componente,
+Se puede ejecutar directamente MiniZinc como se indica en la sección 9 o usar
+el pipeline Python de la sección 11. Al implementar cada componente pendiente,
 su código se ubicará en la ruta prevista de la tabla y se podrá retirar el
 `.gitkeep` de esa carpeta cuando contenga archivos versionados.
 
@@ -259,8 +273,8 @@ El flujo de uso previsto es:
 4. Ejecutar el modelo central con las reglas y el perfil de solver seleccionados.
 5. Visualizar las rutas con Folium y comparar las métricas mediante `experiments/`.
 
-Los comandos de instalación, ejecución de la CLI y construcción del contenedor
-se documentarán cuando existan `pyproject.toml`, `src/cli.py` y `Dockerfile`.
+La sección 11 documenta instalación y CLI. La construcción del contenedor
+se documentará cuando exista `Dockerfile`.
 
 ## 9. Fase 1: Núcleo Matemático con Datos Sintéticos
 
@@ -459,3 +473,138 @@ Validación realizada con MiniZinc 2.11.0, Gecode 6.6.0, HiGHS 1.16.0 y
 OR-Tools CP-SAT 9.15: todos los casos de `check_phase2.sh` pasaron. También
 volvió a pasar `check_phase1.sh`, conservando el óptimo 247 y el umbral de dos
 segundos en esta ejecución. No se modificó el núcleo ni se añadió Python.
+
+## 11. Fase 3: Pipeline Geoespacial Real
+
+### 11.1. Instalación
+
+Desde la raíz del repositorio, usar Python 3.12 o posterior y una instalación
+independiente de MiniZinc con CP-SAT disponible:
+
+```sh
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/routing-system --help
+```
+
+La instalación editable mantiene accesible `models/hfvrptw_core.mzn` desde el
+repositorio. El runner busca el ejecutable en `--minizinc`, en la variable
+`MINIZINC`, en el `PATH` y finalmente en la ubicación estándar de MiniZinc IDE
+para macOS. La librería `minizinc` de Python no instala los solvers.
+
+### 11.2. Descargar, Construir y Resolver
+
+```sh
+# Primera ejecución: requiere internet para consultar Overpass/OpenStreetMap.
+.venv/bin/python -m src.cli build data/raw/guatemala_zona1_15.json data/instances/guatemala_zona1_15.json
+
+# Usa MiniZinc Python y el núcleo existente; no requiere internet.
+.venv/bin/python -m src.cli solve data/instances/guatemala_zona1_15.json --solver cp-sat --time-limit 30 --output data/instances/guatemala_zona1_15.solution.json
+
+# El runner también se puede invocar directamente.
+.venv/bin/python -m src.solver.mzn_runner data/instances/guatemala_zona1_15.json --solver cp-sat --time-limit 30 --output /tmp/guatemala-solution.json
+```
+
+Tras instalar el proyecto, `routing-system build ...` y `routing-system solve ...`
+son equivalentes, activando el entorno virtual o usando `.venv/bin/routing-system`.
+Los comandos `solve` aceptan también `--solver gecode` o `--solver highs`; el
+resultado registrado en esta fase se verificó con CP-SAT. El runner usa un hilo
+y semilla cero, reporta estado, objetivo, rutas, horarios y estadísticas de
+compilación/resolución. `OPTIMAL_SOLUTION` demuestra optimalidad;
+`SATISFIED` con `optimal=false` indica una solución factible sin prueba de
+optimalidad. Si no encuentra solución, conserva el estado, no inventa rutas y
+el comando termina con código 2.
+
+La misma orden `build` reutiliza el GraphML existente sin llamadas de red.
+`--refresh` vuelve a descargar, y `--cache-dir` cambia la carpeta de caché.
+La clave de caché depende del bbox, tipo de red y configuración de estimación.
+Los GraphML y respuestas de Overpass se guardan en `data/cache/`, excluido de
+Git salvo `.gitkeep`. Conviene conservar el GraphML si se desea reconstruir
+exactamente la misma instancia: OSM puede cambiar entre descargas.
+
+### 11.3. Contratos y Cálculo de Matrices
+
+- `osm_extractor.py` descarga una red dirigida `drive` con OSMnx, conserva sus
+  sentidos de circulación, agrega velocidades y tiempos por arco y la guarda
+  atómicamente en GraphML. No convierte la red en un grafo no dirigido.
+- El archivo de entrada contiene `network_bbox` en orden **oeste, sur, este,
+  norte**, coordenadas WGS84 `lat`/`lon`, la flota y los datos operativos. El
+  primer elemento de `nodes` es el depósito; los siguientes son los clientes.
+  `data/raw/guatemala_zona1_15.json` sirve como ejemplo completo del formato.
+- `matrix_builder.py` asigna cada coordenada al nodo vial más cercano. Rechaza
+  puntos a más de 250 metros de la red por defecto, configurable con
+  `--max-snap-distance`. Rechaza demandas negativas, ventanas inválidas,
+  capacidades insuficientes y arcos sin pesos válidos.
+- Para cada origen ejecuta Dijkstra ponderado por `travel_time` en segundos.
+  Calcula cada destino de forma dirigida; nunca copia el triángulo opuesto.
+  Si un destino es inaccesible, falla indicando el par; se debe revisar la
+  coordenada o ampliar el bbox, sin reemplazarlo por distancia en línea recta.
+- La matriz `distance` usa metros enteros redondeados hacia arriba **sobre el
+  mismo camino de menor tiempo**, incluyendo la selección de arcos paralelos.
+  No mezcla distancia mínima de un camino con tiempo mínimo de otro.
+  `travel_time` convierte segundos a minutos redondeando hacia arriba por par
+  origen–destino. Los clientes que compartan nodo vial pueden tener costo y
+  tiempo cero entre sí; cada cliente conserva su demanda y servicio.
+- El JSON del modelo contiene únicamente sus parámetros, matrices rectangulares
+  y vectores. MiniZinc recibe el archivo directamente y aplica sus índices
+  declarados: depósito 0, clientes 1–15. No se modificó el núcleo matemático.
+
+El tiempo vial es una **estimación de flujo libre**, calculada a partir de
+`maxspeed` de OSM e imputación de OSMnx por tipo de vía, con 30 km/h como último
+valor de respaldo. No son mediciones de tráfico en vivo. El snapping aproxima
+el acceso a la calle: no suma el trayecto entre la coordenada y el nodo vial.
+Tampoco se incorporan demoras en cruces, restricciones de giro ni restricciones
+específicas de camiones. La [referencia oficial de OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html)
+describe estas funciones de velocidades, tiempos y nodos cercanos; la
+[API de MiniZinc Python](https://python.minizinc.dev/en/latest/api.html) describe
+la carga de JSON y la ejecución mediante `Model` e `Instance`.
+
+### 11.4. Artefactos y Resultado Verificado
+
+| Archivo | Contenido |
+| :--- | :--- |
+| `data/raw/guatemala_zona1_15.json` | Depósito y 15 coordenadas propuestas en zona 1, dos muelles y tres vehículos. Demandas, flota y ventanas sintéticas; no representa pedidos de comercios reales. |
+| `data/instances/guatemala_zona1_15.json` | Instancia MiniZinc de 16 nodos, con matrices viales reales y datos operativos de prueba. Se puede resolver sin red ni GraphML. |
+| `data/instances/guatemala_zona1_15.geo.json` | Coordenadas originales y ajustadas, ids OSM, errores de snapping, consulta, fecha, unidades, atribución y SHA-256 de entrada, instancia y caché. |
+| `data/instances/guatemala_zona1_15.solution.json` | Solución obtenida mediante MiniZinc Python, con estado, estadísticas y SHA-256 del archivo de instancia. |
+
+Los archivos `.geo.json` y `.solution.json` son metadatos y resultados; no se
+pasan como datos al núcleo. La red se descargó el **19 de noviembre de 2026**:
+660 nodos, 1.340 arcos dirigidos, 16 nodos viales distintos para las coordenadas
+y una distancia máxima de snapping de 76,44 m. Hay 116 pares no ordenados con
+distancia asimétrica y 41 con tiempo asimétrico después del redondeo a minutos.
+
+La validación en macOS ARM64 con Python 3.12, OSMnx 2.2.0, NetworkX 3.7,
+MiniZinc Python 0.10.0, MiniZinc 2.11.0 y CP-SAT 9.15 encontró
+**`OPTIMAL_SOLUTION`, objetivo 16.022**, en 2,65 segundos medidos por el runner
+(incluyendo compilación y resolución, excluyendo descarga y construcción de
+matrices). El límite configurado fue de 30 segundos. El vehículo 1 queda
+inactivo; los vehículos 2 y 3 transportan 7 y 8 unidades:
+
+- Vehículo 2: `0 → 1 → 2 → 3 → 7 → 6 → 5 → 4 → 0`.
+- Vehículo 3: `0 → 8 → 9 → 11 → 10 → 13 → 15 → 14 → 12 → 0`.
+
+El costo usa las unidades abstractas declaradas en el ejemplo y tarifas por
+metro; no representa quetzales ni una cotización logística. Los tiempos de
+proceso dependen del equipo y del estado de OSM al regenerar los datos.
+
+Fuente de la red: **© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)**,
+[Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+La atribución y procedencia también se conservan en el GraphML y el `.geo.json`.
+
+### 11.5. Pruebas
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Las pruebas funcionan sin red y comprueban caminos dirigidos y arcos paralelos,
+coherencia entre distancia y tiempo, caché GraphML y actualización explícita,
+coordenadas alejadas, nodos inaccesibles, validación de datos y serialización.
+También ejecutan MiniZinc Python sobre un grafo pequeño con óptimo conocido y
+una instancia inviable; estas dos pruebas se omiten si MiniZinc no está instalado
+en el PATH o su ubicación estándar de macOS. Una comprobación independiente
+verifica la solución real guardada: cobertura de los 15 clientes, capacidades,
+ventanas, tiempos de recorrido, ocupación de muelles, costo y hashes de la
+instancia. La descarga real y la reconstrucción posterior desde caché se
+verificaron durante la implementación.
