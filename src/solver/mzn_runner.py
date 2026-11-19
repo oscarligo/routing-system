@@ -12,6 +12,8 @@ from time import perf_counter
 
 import minizinc
 
+from .routes import routes_from_successors
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -58,18 +60,7 @@ def solve_instance(
     report["total_cost"] = int(result.objective)
     for name in ("successor", "used", "start_service", "loading_start", "departure", "return_time"):
         report[name] = result[name]
-    report["routes"] = []
-    for row, active in zip(report["successor"], report["used"]):
-        route = [0]
-        if active:
-            current = row[0]
-            while current != 0:
-                if current in route or not 0 < current < len(row):
-                    raise ValueError("Invalid successor cycle returned by solver")
-                route.append(current)
-                current = row[current]
-            route.append(0)
-        report["routes"].append(route)
+    report["routes"] = routes_from_successors(report["successor"], report["used"])
     return report
 
 

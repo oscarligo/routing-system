@@ -162,10 +162,11 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 
 El repositorio contiene el planteamiento, el núcleo MiniZinc y una instancia
 sintética ejecutable (fase 1), más reglas modulares de zonas y descansos
-(fase 2), y el pipeline geoespacial Python + OpenStreetMap (fase 3).
+(fase 2), el pipeline geoespacial Python + OpenStreetMap (fase 3) y el mapa
+operativo Folium (fase 4).
 Los `.gitkeep` conservan las carpetas reservadas. Los perfiles, la cadena de
-frío, el clustering, la visualización y el contenedor siguen pendientes.
-Las secciones 9–11 describen la ejecución disponible.
+frío, el clustering y el contenedor siguen pendientes.
+Las secciones 9–12 describen la ejecución disponible.
 
 ```text
 routing-system/
@@ -192,8 +193,10 @@ routing-system/
 │   │   └── .gitkeep
 │   ├── solver/
 │   │   ├── mzn_runner.py
+│   │   ├── routes.py
 │   │   └── .gitkeep
 │   └── viz/
+│       ├── map_renderer.py
 │       └── .gitkeep
 ├── data/
 │   ├── raw/
@@ -201,6 +204,8 @@ routing-system/
 │   │   └── .gitkeep
 │   ├── cache/
 │   │   └── .gitkeep
+│   ├── maps/
+│   │   └── guatemala_zona1_15.html
 │   └── instances/
 │       ├── guatemala_zona1_15.json
 │       ├── guatemala_zona1_15.geo.json
@@ -214,7 +219,8 @@ routing-system/
 │   ├── check_phase2.sh
 │   └── .gitkeep
 └── tests/
-    └── test_geospatial.py
+    ├── test_geospatial.py
+    └── test_map_renderer.py
 ```
 
 ### 8.1. Archivos y Responsabilidades
@@ -222,7 +228,7 @@ routing-system/
 `models/hfvrptw_core.mzn`, `models/rules/zone_restrictions.mzn` y
 `models/rules/driver_breaks.mzn` ya están implementados. También existen
 `pyproject.toml`, `src/cli.py`, los módulos de `src/geo/` y
-`src/solver/mzn_runner.py`; los demás archivos de esta tabla corresponden a
+`src/solver/mzn_runner.py` y `src/viz/map_renderer.py`; los demás archivos de esta tabla corresponden a
 fases posteriores. El árbol omite los archivos Python `__init__.py`.
 
 | Ruta prevista | Responsabilidad |
@@ -257,6 +263,7 @@ cuando se implementen los modelos y se configuren los motores.
 | `data/raw/` | Pedidos, coordenadas, ventanas horarias y definición de la flota. |
 | `data/cache/` | Grafos viales locales en formato `.graphml`. |
 | `data/instances/` | Instancias `.json` o `.dzn` listas para MiniZinc. |
+| `data/maps/` | Mapas HTML operativos con calles, rutas y horarios. |
 
 ### 8.3. Guía de Uso
 
@@ -608,3 +615,100 @@ verifica la solución real guardada: cobertura de los 15 clientes, capacidades,
 ventanas, tiempos de recorrido, ocupación de muelles, costo y hashes de la
 instancia. La descarga real y la reconstrucción posterior desde caché se
 verificaron durante la implementación.
+
+## 12. Fase 4: Visualización Operativa con Folium
+
+### 12.1. Generar y Abrir el Mapa
+
+Desde la raíz del repositorio y con las dependencias de la sección 11 instaladas:
+
+```sh
+.venv/bin/python -m src.cli render data/instances/guatemala_zona1_15.json data/instances/guatemala_zona1_15.solution.json data/maps/guatemala_zona1_15.html --start-time 08:00
+
+# macOS: abrir el HTML en el navegador predeterminado.
+open data/maps/guatemala_zona1_15.html
+```
+
+También se puede usar `.venv/bin/routing-system render ...`. El renderer utiliza
+por defecto `instance.geo.json` y el GraphML indicado en sus metadatos. Las
+opciones `--geo` y `--graph` permiten indicar esas rutas explícitamente.
+`--start-time` establece la hora equivalente al minuto cero del modelo: 08:00
+es una convención visual configurable, no una hora tomada de OpenStreetMap.
+
+El HTML generado incluye las calles del grafo original como fondo y no solicita
+teselas externas. Folium carga Leaflet y sus librerías de presentación desde CDN:
+la primera apertura necesita acceso a esos recursos; no es un paquete totalmente
+autocontenido para uso sin conexión. La generación desde GraphML no consulta
+OpenStreetMap, no ejecuta de nuevo el solver ni requiere red.
+
+Para generar un mapa nuevo se necesita conservar el **GraphML original**. Si
+la caché no está disponible, se debe reconstruir el pipeline de fase 3 y volver
+a resolver la nueva instancia. No se sustituye silenciosamente la red por una
+descarga actual que podría tener otras calles o sentidos. El HTML ya generado
+no necesita los archivos JSON ni GraphML para abrirse.
+
+### 12.2. Lectura de la Vista Operativa
+
+- Cada vehículo activo tiene su color y una capa independiente, activable en
+  el control superior derecho. Los inactivos se identifican en el panel.
+- Las líneas siguen la geometría de las calles, no segmentos rectos entre
+  clientes. Las flechas indican el sentido de recorrido de cada arco dirigido.
+  Al pasar por una flecha se consulta la calle, el sentido y los extremos OSM;
+  las calles de fondo también muestran nombre y sentido al pasar el cursor.
+- Los marcadores `V2·1`, `V2·2`, etc. indican vehículo y orden de visita. Un clic
+  muestra llegada estimada, inicio de servicio, ventana y espera. El panel
+  conserva esa información por vehículo, junto con carga, distancia, salida y
+  regreso estimado. Se puede hacer zoom y desplazar el mapa.
+- La llegada estimada se calcula viajando inmediatamente después de terminar
+  el servicio anterior, usando los minutos redondeados de la instancia. El
+  vehículo puede llegar **antes** de la apertura y esperar: la condición del
+  modelo es iniciar el servicio dentro de la ventana. Las dos horas se muestran
+  por separado para no confundir llegada temprana con incumplimiento.
+- En el depósito, el diagrama muestra los intervalos `[inicio de carga, salida)`
+  con colores de vehículo y el pico de ocupación. `cumulative` no decide ids de
+  muelle: el renderer asigna los intervalos a muelles disponibles de forma
+  compatible con el plan. No atribuye al solver una asignación que no produjo.
+
+El regreso mostrado en el resumen es la llegada estimada al terminar el último
+viaje. Puede ser anterior a `return_time`, que en el núcleo admite holgura.
+La vista corresponde al núcleo de fase 3; no reconstruye descansos de módulos
+adicionales ni incorpora tráfico en vivo, cruces o tiempos de acceso desde el
+punto original hasta el nodo vial ajustado.
+
+### 12.3. Reconstrucción y Comprobaciones
+
+`src/solver/routes.py` convierte los sucesores en rutas y se reutiliza tanto en
+el runner como en el renderer. Este último vuelve a leer `successor`, sin fiarse
+del campo redundante `routes`: exige regreso al depósito, cobertura única y
+bucles propios en los nodos excluidos de cada vehículo.
+
+`src/viz/map_renderer.py` ejecuta el mismo Dijkstra por origen y la misma
+selección de arcos paralelos que `matrix_builder.py`, sobre el GraphML original.
+Para cada tramo recupera la geometría completa y la orienta desde el origen
+hacia el destino. Comprueba que metros y minutos coincidan con la matriz.
+Antes de dibujar valida los SHA-256 de instancia, solución y grafo, cobertura,
+capacidad, precedencias, ventanas, carga, regreso, ocupación de muelles y costo.
+Un archivo desactualizado o un plan inválido produce un error; no se dibuja
+como si estuviera verificado.
+
+El mapa de ejemplo conserva el óptimo 16.022 y muestra **15/15 servicios dentro
+de ventana**, dos vehículos activos y ocupación máxima **2/2**:
+
+| Vehículo | Carga | Distancia | Carga en depósito | Regreso estimado |
+| :--- | ---: | ---: | :--- | :--- |
+| 1 | Inactivo | — | — | — |
+| 2 | 7/7 | 3,681 km | 08:00–08:07, muelle visual M1 | 09:00 |
+| 3 | 8/8 | 5,960 km | 08:00–08:09, muelle visual M2 | 10:03 |
+
+### 12.4. Validación
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Las 16 pruebas de fases 3 y 4 incluyen geometría de calle almacenada al revés,
+selección del arco paralelo más rápido, sucesores inválidos, espera antes del
+servicio, regreso imposible, exceso de muelles, liberación y reutilización de
+un muelle en el mismo minuto, integridad de archivos y etiquetas HTML seguras.
+El HTML del ejemplo se abrió y se inspeccionó en Firefox en vistas de escritorio
+y móvil. El núcleo MiniZinc no cambió y el runner conserva su comportamiento.

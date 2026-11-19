@@ -20,6 +20,13 @@ def main() -> int:
     solve.add_argument("--time-limit", type=float, default=30)
     solve.add_argument("--minizinc")
     solve.add_argument("--output", type=Path)
+    render = commands.add_parser("render", help="Render a road-following operational HTML map")
+    render.add_argument("instance", type=Path)
+    render.add_argument("solution", type=Path)
+    render.add_argument("output", type=Path)
+    render.add_argument("--geo", type=Path, help="Defaults to instance.geo.json")
+    render.add_argument("--graph", type=Path, help="Original GraphML; defaults to metadata cache path")
+    render.add_argument("--start-time", default="08:00", help="Clock time corresponding to model minute 0")
     args = parser.parse_args()
     if args.command == "build":
         from .geo.matrix_builder import write_instance
@@ -30,6 +37,14 @@ def main() -> int:
         data = write_instance(graph, args.raw, args.output, graph_file=cached, max_snap_distance_m=args.max_snap_distance)
         print(json.dumps({"instance": str(args.output), "geography": str(args.output.with_suffix('.geo.json')),
                           "graph_cache": str(cached), "n_customers": data["n_customers"]}, indent=2))
+        return 0
+
+    if args.command == "render":
+        from .viz.map_renderer import render_map
+
+        output = render_map(args.instance, args.solution, args.output,
+                            geo_file=args.geo, graph_file=args.graph, start_time=args.start_time)
+        print(json.dumps({"map": str(output), "start_time": args.start_time}, indent=2))
         return 0
 
     from .solver.mzn_runner import solve_instance
