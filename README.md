@@ -155,3 +155,96 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 - Estudio comparativo detallado que identifique qué paradigma (CP, MIP o SAT) responde mejor al problema HFVRPTW-C según el tamaño de la instancia.
 - Demostración práctica de cómo la restricción `cumulative` modela con exactitud y eficiencia los cuellos de botella en depósitos logísticos.
 - Cuadro comparativo del impacto del *flattening* (tiempo de traducción y tamaño del archivo `.fzn`).
+
+---
+
+## 8. Estructura del Repositorio
+
+El repositorio contiene el planteamiento anterior y el esqueleto de directorios.
+Los únicos archivos agregados al esqueleto son `.gitkeep` vacíos, que permiten
+versionar las carpetas con Git. Los archivos de implementación descritos más
+abajo están **previstos y todavía no existen**; tampoco hay dependencias,
+contenedor ni comandos de ejecución configurados.
+
+```text
+routing-system/
+├── README.md
+├── models/
+│   ├── rules/
+│   │   └── .gitkeep
+│   ├── extensions/
+│   │   └── .gitkeep
+│   └── profiles/
+│       └── .gitkeep
+├── src/
+│   ├── geo/
+│   │   └── .gitkeep
+│   ├── decomposition/
+│   │   └── .gitkeep
+│   ├── solver/
+│   │   └── .gitkeep
+│   └── viz/
+│       └── .gitkeep
+├── data/
+│   ├── raw/
+│   │   └── .gitkeep
+│   ├── cache/
+│   │   └── .gitkeep
+│   └── instances/
+│       └── .gitkeep
+└── experiments/
+    └── .gitkeep
+```
+
+### 8.1. Archivos Previstos y Responsabilidades
+
+| Ruta prevista | Responsabilidad |
+| :--- | :--- |
+| `pyproject.toml` | Declarar las dependencias de Python: minizinc, osmnx, networkx y folium. |
+| `Dockerfile` | Proveer un entorno reproducible con MiniZinc, Gecode, HiGHS y OR-Tools. |
+| `models/hfvrptw_core.mzn` | Núcleo declarativo agnóstico del solver: rutas con `subcircuit`, capacidad de muelles con `cumulative` y ventanas de tiempo. |
+| `models/rules/zone_restrictions.mzn` | Restricciones modulares de compatibilidad vehículo-zona, como acceso de carga pesada. |
+| `models/rules/cold_chain.mzn` | Prioridad o tiempo máximo en ruta para mercancía perecedera. |
+| `models/rules/driver_breaks.mzn` | Ventanas obligatorias de descanso de conductores. |
+| `models/extensions/lns_search.mzn` | Búsqueda `relax_and_reconstruct` para instancias que superen el alcance práctico de la resolución exacta. |
+| `models/profiles/cp_gecode.mpc` | Perfil de ejecución para programación por restricciones con Gecode. |
+| `models/profiles/mip_highs.mpc` | Perfil de ejecución para programación entera mixta con HiGHS. |
+| `models/profiles/sat_ortools.mpc` | Perfil de ejecución para CP-SAT híbrido con OR-Tools. |
+| `src/cli.py` | Punto de entrada único para la capa de datos y orquestación. |
+| `src/geo/osm_extractor.py` | Descargar y almacenar en caché la red vial de OpenStreetMap. |
+| `src/geo/matrix_builder.py` | Construir matrices asimétricas y exportar datos JSON para MiniZinc. |
+| `src/decomposition/clusterer.py` | Particionamiento espacial capacitado para instancias de más de 100 nodos. |
+| `src/solver/mzn_runner.py` | Ejecutar MiniZinc, gestionar la compilación a FlatZinc y extraer métricas. |
+| `src/viz/map_renderer.py` | Representar rutas sobre calles reales en mapas HTML con Folium. |
+| `experiments/compare_paradigms.py` | Medir tiempo de compilación, tamaño de `.fzn` y tiempo de resolución por paradigma. |
+| `experiments/benchmark_agility.py` | Evaluar el impacto de activar o desactivar las restricciones de `models/rules/`. |
+
+Los perfiles buscan facilitar el enfoque «Model once, solve anywhere». Su
+compatibilidad con las restricciones y anotaciones elegidas deberá validarse
+cuando se implementen los modelos y se configuren los motores.
+
+### 8.2. Organización de Datos
+
+| Directorio | Contenido previsto |
+| :--- | :--- |
+| `data/raw/` | Pedidos, coordenadas, ventanas horarias y definición de la flota. |
+| `data/cache/` | Grafos viales locales en formato `.graphml`. |
+| `data/instances/` | Instancias `.json` o `.dzn` listas para MiniZinc. |
+
+### 8.3. Guía de Uso
+
+En esta etapa se puede explorar la estructura y consultar el planteamiento;
+no hay todavía una aplicación ejecutable. Al implementar cada componente,
+su código se ubicará en la ruta prevista de la tabla y se podrá retirar el
+`.gitkeep` de esa carpeta cuando contenga archivos versionados.
+
+El flujo de uso previsto es:
+
+1. Preparar pedidos, ventanas y flota en `data/raw/`.
+2. Descargar o reutilizar la red vial de `data/cache/` y construir las matrices.
+3. Exportar una instancia a `data/instances/`.
+4. Ejecutar el modelo central con las reglas y el perfil de solver seleccionados.
+5. Visualizar las rutas con Folium y comparar las métricas mediante `experiments/`.
+
+Los comandos de instalación, ejecución de la CLI y construcción del contenedor
+se documentarán cuando existan `pyproject.toml`, `src/cli.py` y `Dockerfile`.
