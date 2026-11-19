@@ -161,8 +161,9 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 ## 8. Estructura del Repositorio
 
 El repositorio contiene el planteamiento, el núcleo MiniZinc y una instancia
-sintética ejecutable (fase 1). Los `.gitkeep` conservan las carpetas reservadas.
-La capa Python, los perfiles, las reglas modulares, las dependencias y el
+sintética ejecutable (fase 1), más reglas modulares de zonas y descansos
+(fase 2). Los `.gitkeep` conservan las carpetas reservadas.
+La capa Python, los perfiles, la cadena de frío, las dependencias y el
 contenedor siguen pendientes. La sección 9 describe la ejecución disponible.
 
 ```text
@@ -170,7 +171,10 @@ routing-system/
 ├── README.md
 ├── models/
 │   ├── hfvrptw_core.mzn
+│   ├── hfvrptw_rules.mzn
 │   ├── rules/
+│   │   ├── zone_restrictions.mzn
+│   │   ├── driver_breaks.mzn
 │   │   └── .gitkeep
 │   ├── extensions/
 │   │   └── .gitkeep
@@ -192,16 +196,20 @@ routing-system/
 │   │   └── .gitkeep
 │   └── instances/
 │       ├── toy_10nodes.dzn
+│       ├── toy_rules_10nodes.dzn
+│       ├── toy_rules_config.dzn
 │       └── .gitkeep
 └── experiments/
     ├── check_phase1.sh
+    ├── check_phase2.sh
     └── .gitkeep
 ```
 
 ### 8.1. Archivos y Responsabilidades
 
-`models/hfvrptw_core.mzn` ya está implementado; los demás archivos de esta
-tabla corresponden a fases posteriores.
+`models/hfvrptw_core.mzn`, `models/rules/zone_restrictions.mzn` y
+`models/rules/driver_breaks.mzn` ya están implementados; los demás archivos
+de esta tabla corresponden a fases posteriores.
 
 | Ruta prevista | Responsabilidad |
 | :--- | :--- |
@@ -340,3 +348,114 @@ Los tiempos dependen del equipo, la carga y la configuración de hilos. Una
 medición preliminar con hilos predeterminados dio 2,93 s para HiGHS; por eso la
 configuración de un hilo forma parte de la reproducción del criterio. Este
 resultado no garantiza el umbral de dos segundos para otras instancias.
+
+## 10. Fase 2: Reglas Modulares de Negocio
+
+### 10.1. Composición y Activación
+
+`models/hfvrptw_rules.mzn` incluye el núcleo y los módulos de zonas y descansos.
+**`hfvrptw_core.mzn` permanece sin cambios** y sigue ejecutándose por separado.
+Los módulos no contienen su propio `solve` ni cambian la función objetivo.
+También se puede crear otro archivo de composición con el núcleo y únicamente
+el `include` de la regla deseada.
+
+| Módulo | Parámetro de activación | Datos o constantes |
+| :--- | :--- | :--- |
+| `rules/zone_restrictions.mzn` | `enable_zone_restrictions` | `zone_max_capacity[i]`, capacidad máxima del vehículo admitido en cada cliente. |
+| `rules/driver_breaks.mzn` | `enable_driver_breaks` | Constantes de negocio: `break_threshold = 240` y `break_duration = 30`, en minutos. |
+
+Los booleanos se suministran explícitamente mediante `-D` o en un `.dzn`.
+`toy_rules_config.dzn` aporta los límites por zona; se necesita incluso si la
+regla está apagada al usar el archivo de composición que incluye ambos módulos.
+No definir un mismo parámetro en dos archivos de datos.
+
+```sh
+# Ambas apagadas: óptimo 246 en la variante de fase 2.
+minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=false; enable_driver_breaks=false;'
+
+# Solo zonas: óptimo 253 y reasignación de las rutas.
+minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=false;'
+
+# Solo descansos: óptimo 246, con pausa en la ruta larga.
+minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=false; enable_driver_breaks=true;'
+
+# Ambas activadas: óptimo 253 y pausa en la ruta reasignada.
+minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=true;'
+```
+
+En el IDE, abrir `hfvrptw_rules.mzn`, seleccionar la instancia y el archivo de
+configuración, y proporcionar ambos booleanos como datos adicionales o mediante
+un tercer `.dzn`. Se pueden cambiar los motores igual que en la fase 1.
+
+### 10.2. Semántica de las Reglas
+
+**Zonas.** La capacidad del vehículo representa su tamaño: se prohíbe asignarlo
+a un cliente si `capacity[k] > zone_max_capacity[i]`. La igualdad está permitida.
+Un límite cero prohíbe todos los vehículos del núcleo, cuyas capacidades son
+positivas. Este módulo no modela peso real, placas ni zonas de tránsito intermedio.
+
+**Descansos.** Si el tiempo desde la salida hasta el regreso efectivo supera
+240 minutos, se exige una pausa continua de 30 minutos en un cliente visitado,
+inmediatamente después de su servicio. La pausa debe comenzar como máximo
+240 minutos después de la salida. Se añade su duración a la precedencia del
+siguiente viaje, incluido el regreso al depósito si es el último cliente.
+No puede solaparse con conducción ni servicio; puede aprovechar una espera
+antes de la siguiente ventana. También se permiten pausas en rutas cortas.
+
+El tiempo de ruta incluye conducción, servicio y espera; no incluye la carga
+inicial. Se modela una sola pausa por ruta, sin descansos recurrentes ni paradas
+en carretera. Son convenciones de esta fase, no un modelo de normativa laboral.
+
+`break_after[k]` identifica el cliente de la pausa, o cero si no hay pausa;
+`break_start[k]` indica su inicio. Con la regla activa, `route_finish[k]` calcula
+el regreso al terminar el último viaje, sin la holgura de `return_time[k]` del
+núcleo. Esto evita exigir una pausa solo porque el solver elija una hora de
+regreso artificialmente tardía. Con la regla apagada, `route_finish` muestra
+`return_time`; no se agregan las restricciones temporales de descansos.
+Los vehículos inactivos siempre tienen `break_after = 0`.
+
+### 10.3. Instancias y Resultados Esperados
+
+La instancia original conserva su óptimo **247** con ambas reglas apagadas o
+encendidas: ningún vehículo infringe la zona y ninguna ruta requiere cuatro
+horas. Para ejercitar cambios reales se añade `toy_rules_10nodes.dzn`, que
+conserva los diez clientes y las matrices, cambia capacidades a `[12, 9, 16]`,
+extiende el horizonte a 420 minutos y mueve la ventana del cliente 10 a
+`[300,304]`. La configuración limita a 12 la capacidad admitida en el cliente 8.
+
+| Zonas | Descansos | Óptimo | Efecto en la variante |
+| :--- | :--- | ---: | :--- |
+| Apagadas | Apagados | 246 | Vehículos 1, 2 y 3 atienden grupos 5–7, 1–4 y 8–10. |
+| Encendidas | Apagados | 253 | Vehículos 1 y 3 intercambian grupos: el vehículo 3 ya no puede visitar el cliente 8. |
+| Apagadas | Encendidos | 246 | El vehículo 3 incorpora una pausa, por ejemplo después del cliente 9. |
+| Encendidas | Encendidos | 253 | El vehículo 1 atiende 8–10 e incorpora la pausa. |
+
+Un horario factible con ambas reglas carga el vehículo 1 en `[10,18)` y atiende
+los clientes 8, 9 y 10 en los minutos 30, 55 y 300. Descansa tras el servicio del
+cliente 9, entre 60 y 90; luego viaja 5 minutos y espera hasta 300. Regresa en
+317. La espera absorbe la pausa, por lo que activar descansos no aumenta el costo.
+Los horarios y la ubicación de la pausa pueden variar entre soluciones óptimas.
+
+### 10.4. Verificación Reproducible
+
+```sh
+sh experiments/check_phase2.sh
+# macOS, si MiniZinc no está en PATH:
+MINIZINC=/Applications/MiniZincIDE.app/Contents/Resources/minizinc sh experiments/check_phase2.sh
+```
+
+El verificador usa las mismas herramientas de consola que el de fase 1.
+Ejecuta Gecode, HiGHS y OR-Tools CP-SAT con un hilo y hasta 60 segundos por caso.
+Comprueba los óptimos de la tabla, la regresión de la instancia original y
+contraejemplos que deben resultar inviables: vehículo prohibido, ruta larga
+sin pausa, pausa solapada con viaje y regreso antes de completar el descanso.
+También comprueba el umbral exacto de 240 minutos y un vehículo inactivo.
+Una ventana incompatible con el descanso debe producir inviabilidad, sin
+relajar la regla ni las ventanas del núcleo. Los casos se crean temporalmente.
+Esta fase valida modularidad y factibilidad; no impone el umbral de dos segundos
+a la instancia ampliada ni a sus pruebas de inviabilidad.
+
+Validación realizada con MiniZinc 2.11.0, Gecode 6.6.0, HiGHS 1.16.0 y
+OR-Tools CP-SAT 9.15: todos los casos de `check_phase2.sh` pasaron. También
+volvió a pasar `check_phase1.sh`, conservando el óptimo 247 y el umbral de dos
+segundos en esta ejecución. No se modificó el núcleo ni se añadió Python.

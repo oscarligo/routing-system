@@ -1,0 +1,2 @@
+% Node 8 is inaccessible to vehicles whose capacity exceeds 12.
+zone_max_capacity = [16, 16, 16, 16, 16, 16, 16, 12, 16, 16];
