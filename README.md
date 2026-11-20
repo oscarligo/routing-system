@@ -1,5 +1,10 @@
 # Optimización Logística mediante Programación por Restricciones (HFVRPTW-C)
 
+Repositorio: [oscarligo/routing-system](https://github.com/oscarligo/routing-system).
+Código fuente: [modelos MiniZinc](https://github.com/oscarligo/routing-system/tree/main/models),
+[instancias de datos](https://github.com/oscarligo/routing-system/tree/main/data/instances) y
+[pipeline Python](https://github.com/oscarligo/routing-system/tree/main/src).
+
 ---
 
 ## 1. Contexto General y Motivación
@@ -86,54 +91,13 @@ $$\min \quad Z = \sum_{k \in K} F_k \cdot y_k + \sum_{k \in K} C_k \sum_{i \in N
 
 ---
 
-## 4. Arquitectura Tecnológica y Filosofía "Model Once, Solve Anywhere"
+## 4. Objetivos del Proyecto
 
-El proyecto adopta un enfoque desacoplado en dos capas principales:
-
-```
-+-------------------------------------------------------------+
-|               Capa de Integracion (Python)                  |
-|  - Generacion de instancias y lectura de datos              |
-|  - Orquestacion via MiniZinc-Python API                     |
-|  - Procesamiento, visualizacion de rutas y metricas         |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                Capa de Modelado (MiniZinc)                  |
-|  - Modelo declarativo puro (.mzn)                           |
-|  - Uso de restricciones globales (alldifferent, cumulative) |
-|  - Compilacion a FlatZinc (.fzn)                            |
-+-------------------------------------------------------------+
-                              |
-           +------------------+------------------+
-           |                  |                  |
-           v                  v                  v
-    +--------------+   +--------------+   +--------------+
-    | CP Engine    |   | MIP Engine   |   | SAT/CP Engine|
-    | (Gecode)     |   | (HiGHS)      |   | (OR-Tools)   |
-    +--------------+   +--------------+   +--------------+
-```
-
-### 4.1. El Rol de FlatZinc y la Portabilidad entre Solvers
-
-MiniZinc compila el modelo abstracto `.mzn` junto con los datos `.dzn` a una representación intermedia de bajo nivel denominada **FlatZinc (`.fzn`)**. Esta arquitectura permite ejecutar el **mismo modelo matemático** en distintos motores de búsqueda sin modificar el código:
-
-- **Gecode (CP):** motor clásico de Programación por Restricciones especializado en propagación e inferencia sobre dominios finitos.
-
-- **HiGHS (MIP):** motor de Programación Entera Mixta para evaluar linealización y relajaciones continuas.
-
-- **OR-Tools CP-SAT (Híbrido):** Solver de vanguardia basado en tecnología SAT y propagación de restricciones.
-
----
-
-## 5. Objetivos del Proyecto
-
-### 5.1. Objetivo General
+### 4.1. Objetivo General
 
 Diseñar, formular e implementar un modelo de optimización declarativo en MiniZinc integrado con Python para resolver el problema HFVRPTW-C, evaluando la agilidad declarativa de la herramienta y comparando cuantitativamente el desempeño de compilación a FlatZinc y resolución bajo motores CP, MIP y SAT/CP Híbrido.
 
-### 5.2. Objetivos Específicos
+### 4.2. Objetivos Específicos
 
 1. **Formulación y Restricciones Globales:** formular de forma matemática rigurosa las restricciones de ruteo, heterogeneidad de flota, ventanas de tiempo y capacidad en depósito aprovechando las restricciones globales `alldifferent` y `cumulative`.
 2. **Evaluación Multiparadigma (*Model Once, Solve Anywhere*):** comparar el rendimiento (tiempo de respuesta, calidad del valor objetivo y brecha de optimalidad) entre los solvers Gecode (CP), HiGHS (MIP) y OR-Tools CP-SAT ante instancias de escala pequeña, mediana y grande.
@@ -143,7 +107,7 @@ Diseñar, formular e implementar un modelo de optimización declarativo en MiniZ
 
 ---
 
-## 6. Plan de Experimentación y Evaluación de Escalabilidad
+## 5. Plan de Experimentación y Evaluación de Escalabilidad
 
 Las pruebas experimentales se realizarán sobre un conjunto de instancias adaptadas de la literatura estándar (Solomon / VRPTW adaptadas a flota heterogénea y muelles), clasificadas en tres niveles:
 
@@ -155,7 +119,7 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 
 ---
 
-## 7. Resultados Esperados
+## 6. Resultados Esperados
 
 - Modelo declarativo en MiniZinc altamente legible, modular y mantenible.
 - Estudio comparativo detallado que identifique qué paradigma (CP, MIP o SAT) responde mejor al problema HFVRPTW-C según el tamaño de la instancia.
@@ -164,107 +128,19 @@ Las pruebas experimentales se realizarán sobre un conjunto de instancias adapta
 
 ---
 
-## 8. Estructura del Repositorio
+## 7. MiniZinc: Modelo, Ejecución y Salidas
 
-El repositorio contiene el núcleo MiniZinc, reglas modulares de zonas y
-descansos, el pipeline geoespacial Python + OpenStreetMap y la visualización
-operativa con Folium. El siguiente árbol refleja los archivos actuales; omite
-el entorno virtual, los archivos temporales y las cachés generadas.
+### 7.1. El Rol de FlatZinc y la Portabilidad entre Solvers
 
-```text
-routing-system/
-├── README.md
-├── .gitignore
-├── pyproject.toml
-├── models/
-│   ├── hfvrptw_core.mzn
-│   ├── hfvrptw_rules.mzn
-│   └── rules/
-│       ├── zone_restrictions.mzn
-│       └── driver_breaks.mzn
-├── src/
-│   ├── __init__.py
-│   ├── cli.py
-│   ├── geo/
-│   │   ├── __init__.py
-│   │   ├── osm_extractor.py
-│   │   └── matrix_builder.py
-│   ├── solver/
-│   │   ├── __init__.py
-│   │   ├── mzn_runner.py
-│   │   └── routes.py
-│   └── viz/
-│       ├── __init__.py
-│       └── map_renderer.py
-├── data/
-│   ├── raw/
-│   │   └── guatemala_zona1_15.json
-│   ├── cache/
-│   │   └── .gitkeep
-│   ├── maps/
-│   │   └── guatemala_zona1_15.html
-│   └── instances/
-│       ├── guatemala_zona1_15.json
-│       ├── guatemala_zona1_15.geo.json
-│       ├── guatemala_zona1_15.solution.json
-│       ├── toy_10nodes.dzn
-│       ├── toy_rules_10nodes.dzn
-│       └── toy_rules_config.dzn
-├── experiments/
-│   ├── check_phase1.sh
-│   └── check_phase2.sh
-└── tests/
-    ├── test_geospatial.py
-    └── test_map_renderer.py
-```
+MiniZinc compila el modelo abstracto `.mzn` junto con los datos `.dzn` a una representación intermedia de bajo nivel denominada **FlatZinc (`.fzn`)**. Esta arquitectura permite ejecutar el **mismo modelo matemático** en distintos motores de búsqueda sin modificar el código:
 
-### 8.1. Archivos y Responsabilidades
+- **Gecode (CP):** motor clásico de Programación por Restricciones especializado en propagación e inferencia sobre dominios finitos.
 
-| Ruta | Responsabilidad |
-| :--- | :--- |
-| `pyproject.toml` | Dependencias de Python, configuración del paquete y comando `routing-system`. |
-| `models/hfvrptw_core.mzn` | Rutas con `subcircuit`, capacidad de muelles con `cumulative`, capacidades de vehículos y ventanas de tiempo. |
-| `models/hfvrptw_rules.mzn` | Componer el núcleo con las reglas opcionales de zonas y descansos. |
-| `models/rules/zone_restrictions.mzn` | Restringir la asignación de vehículos según la capacidad máxima permitida por zona. |
-| `models/rules/driver_breaks.mzn` | Incorporar pausas de conductores y su efecto en los horarios de ruta. |
-| `src/cli.py` | Comandos `build`, `solve` y `render` para construir instancias, resolverlas y generar mapas. |
-| `src/geo/osm_extractor.py` | Descargar y almacenar en caché la red vial dirigida de OpenStreetMap. |
-| `src/geo/matrix_builder.py` | Construir matrices asimétricas y exportar la instancia y sus metadatos geográficos. |
-| `src/solver/mzn_runner.py` | Ejecutar MiniZinc y extraer soluciones, rutas y estadísticas de compilación y resolución. |
-| `src/solver/routes.py` | Reconstruir y validar las rutas a partir de los sucesores del modelo. |
-| `src/viz/map_renderer.py` | Validar la solución y representar rutas, horarios y ocupación de muelles en HTML con Folium. |
-| `experiments/check_phase1.sh` | Verificar el núcleo sintético con Gecode, HiGHS y CP-SAT. |
-| `experiments/check_phase2.sh` | Verificar las reglas de zonas y descansos y su compatibilidad con el núcleo. |
-| `tests/test_geospatial.py` | Probar matrices viales, caché, validación de datos e integración con MiniZinc. |
-| `tests/test_map_renderer.py` | Probar la reconstrucción de calles, validación de soluciones y generación del mapa. |
+- **HiGHS (MIP):** motor de Programación Entera Mixta para evaluar linealización y relajaciones continuas.
 
-### 8.2. Organización de Datos
+- **OR-Tools CP-SAT (Híbrido):** Solver de vanguardia basado en tecnología SAT y propagación de restricciones.
 
-| Directorio | Contenido |
-| :--- | :--- |
-| `data/raw/` | Coordenadas, demandas, ventanas horarias y definición de la flota de entrada. |
-| `data/cache/` | Grafos `.graphml` y respuestas de Overpass generados localmente, excluidos de Git salvo `.gitkeep`. |
-| `data/instances/` | Instancias `.json` o `.dzn`, metadatos geográficos `.geo.json` y resultados `.solution.json`. |
-| `data/maps/` | Mapas HTML operativos con calles, rutas y horarios. |
-
-La caché conserva el grafo original necesario para regenerar el mapa de una
-solución existente. El pipeline crea sus subdirectorios cuando los necesita.
-
-### 8.3. Guía de Uso
-
-Se puede ejecutar MiniZinc directamente sobre los modelos y datos sintéticos,
-o usar el pipeline Python mediante `src/cli.py`. El flujo geoespacial es:
-
-1. Preparar coordenadas, demandas, ventanas y flota en `data/raw/`.
-2. Ejecutar `build` para descargar o reutilizar la red vial y exportar las matrices y metadatos a `data/instances/`.
-3. Ejecutar `solve` para resolver la instancia con el motor seleccionado y guardar la solución.
-4. Ejecutar `render` para generar el mapa en `data/maps/` usando la solución y el grafo original.
-
-Las opciones se consultan con `python -m src.cli --help` y con `--help` en cada
-subcomando. Los scripts de `experiments/` verifican los casos sintéticos con y
-sin reglas adicionales.
-
-### 8.4. Ejecución Independiente con MiniZinc y Lectura de Salidas
+### 7.2. Ejecución Independiente y Lectura de Salidas
 
 Estos ejemplos requieren **MiniZinc y el solver Gecode instalado**. No requieren
 Python, el entorno virtual, acceso a OpenStreetMap ni los archivos del pipeline
@@ -297,6 +173,16 @@ no se ejecutan por separado. `toy_rules_config.dzn` define los límites por zona
 y se requiere incluso si se desactiva esa regla. Los dos booleanos de activación
 se proporcionan con `-D` en el comando; no están definidos en esos datos.
 No hay que agregar `toy_10nodes.dzn` al caso con reglas, pues duplicaría parámetros.
+
+Los archivos originales están disponibles en el repositorio:
+
+- [Núcleo: hfvrptw_core.mzn](models/hfvrptw_core.mzn).
+- [Composición: hfvrptw_rules.mzn](models/hfvrptw_rules.mzn).
+- [Regla de zonas: zone_restrictions.mzn](models/rules/zone_restrictions.mzn).
+- [Regla de descansos: driver_breaks.mzn](models/rules/driver_breaks.mzn).
+- [Instancia del núcleo: toy_10nodes.dzn](data/instances/toy_10nodes.dzn).
+- [Instancia con reglas: toy_rules_10nodes.dzn](data/instances/toy_rules_10nodes.dzn).
+- [Configuración: toy_rules_config.dzn](data/instances/toy_rules_config.dzn).
 
 #### Ejecutar el núcleo y consultar su salida
 
@@ -403,9 +289,76 @@ minizinc --solver gecode --parallel 1 --statistics models/hfvrptw_core.mzn data/
 La salida directa es texto: no genera por sí sola los archivos `.solution.json`,
 los mapas HTML ni los metadatos geográficos del pipeline Python.
 
-## 9. Interpretación de los Resultados
+## 8. Interpretación de los Resultados de MiniZinc
 
-### 9.1. Calidad de la Solución y Uso de la Flota
+Los casos sintéticos permiten aislar el efecto de las restricciones de zonas
+y descansos en la variante `toy_rules_10nodes.dzn`:
+
+| Restricciones activas | Costo óptimo | Interpretación |
+| :--- | ---: | :--- |
+| Ninguna | 246 | Referencia para comparar las reglas sobre la misma instancia. |
+| Zonas | 253 | La prohibición de acceso obliga a reasignar clientes entre vehículos. |
+| Descansos | 246 | La pausa puede encajar en una espera sin aumentar el costo de recorrido. |
+| Zonas y descansos | 253 | Se modifica la asignación y se incorpora la pausa, conservando el costo del caso con zonas. |
+
+La restricción de zonas aumenta el costo en **7 unidades, aproximadamente
+2,85 %**, respecto de la referencia. Este incremento cuantifica el costo de
+cumplir esa regla en el ejemplo. Que el descanso no cambie el objetivo no
+significa que carezca de efecto: modifica el horario y exige reservar una pausa
+factible. En este caso, la espera antes de una ventana tardía permite absorberla.
+
+La instancia sintética original `toy_10nodes.dzn` conserva el óptimo **247**
+con las reglas activadas o desactivadas porque no fuerza esos conflictos. Sus
+costos no deben compararse directamente con los 246 de la variante, que cambia
+capacidades y ventanas. El caso geoespacial de la sección 9 utiliza otras matrices y escalas de
+distancia, por lo que tampoco admite una comparación directa de costos.
+
+## 9. Integración y Resultados con Python
+
+### 9.1. Arquitectura del Pipeline
+
+El proyecto adopta un enfoque desacoplado en dos capas principales:
+
+```
++-------------------------------------------------------------+
+|               Capa de Integracion (Python)                  |
+|  - Generacion de instancias y lectura de datos              |
+|  - Orquestacion via MiniZinc-Python API                     |
+|  - Procesamiento, visualizacion de rutas y metricas         |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                Capa de Modelado (MiniZinc)                  |
+|  - Modelo declarativo puro (.mzn)                           |
+|  - Uso de restricciones globales (alldifferent, cumulative) |
+|  - Compilacion a FlatZinc (.fzn)                            |
++-------------------------------------------------------------+
+                              |
+           +------------------+------------------+
+           |                  |                  |
+           v                  v                  v
+    +--------------+   +--------------+   +--------------+
+    | CP Engine    |   | MIP Engine   |   | SAT/CP Engine|
+    | (Gecode)     |   | (HiGHS)      |   | (OR-Tools)   |
+    +--------------+   +--------------+   +--------------+
+```
+
+### 9.2. Guía de Uso del Pipeline
+
+Se puede ejecutar MiniZinc directamente sobre los modelos y datos sintéticos,
+o usar el pipeline Python mediante `src/cli.py`. El flujo geoespacial es:
+
+1. Preparar coordenadas, demandas, ventanas y flota en `data/raw/`.
+2. Ejecutar `build` para descargar o reutilizar la red vial y exportar las matrices y metadatos a `data/instances/`.
+3. Ejecutar `solve` para resolver la instancia con el motor seleccionado y guardar la solución.
+4. Ejecutar `render` para generar el mapa en `data/maps/` usando la solución y el grafo original.
+
+Las opciones se consultan con `python -m src.cli --help` y con `--help` en cada
+subcomando. Los scripts de `experiments/` verifican los casos sintéticos con y
+sin reglas adicionales.
+
+### 9.3. Calidad de la Solución y Uso de la Flota
 
 La [solución registrada](data/instances/guatemala_zona1_15.solution.json) para
 los 15 clientes de zona 1 de Guatemala tiene estado `OPTIMAL_SOLUTION` y costo
@@ -436,7 +389,7 @@ El nodo `0` representa el depósito. Las distancias se calculan sobre caminos
 dirigidos de la red vial: el sentido de circulación puede hacer que ir de un
 cliente a otro tenga un costo distinto al recorrido inverso.
 
-### 9.2. Cumplimiento Horario y Capacidad del Depósito
+### 9.4. Cumplimiento Horario y Capacidad del Depósito
 
 El [mapa operativo](data/maps/guatemala_zona1_15.html) muestra **15/15 servicios
 iniciados dentro de su ventana horaria**. Llegar antes de la apertura es factible
@@ -459,31 +412,7 @@ la función objetivo: distintas soluciones de igual costo pueden tener horarios
 diferentes. Además, `return_time` admite holgura; para interpretar la operación
 conviene usar el regreso estimado al completar el último trayecto.
 
-### 9.3. Efecto de las Reglas de Negocio
-
-Los casos sintéticos permiten aislar el efecto de las restricciones de zonas
-y descansos en la variante `toy_rules_10nodes.dzn`:
-
-| Restricciones activas | Costo óptimo | Interpretación |
-| :--- | ---: | :--- |
-| Ninguna | 246 | Referencia para comparar las reglas sobre la misma instancia. |
-| Zonas | 253 | La prohibición de acceso obliga a reasignar clientes entre vehículos. |
-| Descansos | 246 | La pausa puede encajar en una espera sin aumentar el costo de recorrido. |
-| Zonas y descansos | 253 | Se modifica la asignación y se incorpora la pausa, conservando el costo del caso con zonas. |
-
-La restricción de zonas aumenta el costo en **7 unidades, aproximadamente
-2,85 %**, respecto de la referencia. Este incremento cuantifica el costo de
-cumplir esa regla en el ejemplo. Que el descanso no cambie el objetivo no
-significa que carezca de efecto: modifica el horario y exige reservar una pausa
-factible. En este caso, la espera antes de una ventana tardía permite absorberla.
-
-La instancia sintética original `toy_10nodes.dzn` conserva el óptimo **247**
-con las reglas activadas o desactivadas porque no fuerza esos conflictos. Sus
-costos no deben compararse directamente con los 246 de la variante, que cambia
-capacidades y ventanas, ni con los 16.022 del caso geoespacial, que usa otras
-matrices y escalas de distancia.
-
-### 9.4. Rendimiento y Alcance de las Conclusiones
+### 9.5. Rendimiento y Alcance de las Conclusiones
 
 La ejecución geoespacial registrada con CP-SAT 9.15 tardó **2,65 segundos** en
 el runner, incluyendo compilación y resolución. Las estadísticas reportan
@@ -509,3 +438,91 @@ y condiciones con la operación real.
 
 Fuente de la red: **© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)**,
 [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+
+---
+
+## 10. Estructura del Repositorio
+
+El repositorio contiene el núcleo MiniZinc, reglas modulares de zonas y
+descansos, el pipeline geoespacial Python + OpenStreetMap y la visualización
+operativa con Folium. El siguiente árbol refleja los archivos actuales; omite
+el entorno virtual, los archivos temporales y las cachés generadas.
+
+```text
+routing-system/
+├── README.md
+├── .gitignore
+├── pyproject.toml
+├── models/
+│   ├── hfvrptw_core.mzn
+│   ├── hfvrptw_rules.mzn
+│   └── rules/
+│       ├── zone_restrictions.mzn
+│       └── driver_breaks.mzn
+├── src/
+│   ├── __init__.py
+│   ├── cli.py
+│   ├── geo/
+│   │   ├── __init__.py
+│   │   ├── osm_extractor.py
+│   │   └── matrix_builder.py
+│   ├── solver/
+│   │   ├── __init__.py
+│   │   ├── mzn_runner.py
+│   │   └── routes.py
+│   └── viz/
+│       ├── __init__.py
+│       └── map_renderer.py
+├── data/
+│   ├── raw/
+│   │   └── guatemala_zona1_15.json
+│   ├── cache/
+│   │   └── .gitkeep
+│   ├── maps/
+│   │   └── guatemala_zona1_15.html
+│   └── instances/
+│       ├── guatemala_zona1_15.json
+│       ├── guatemala_zona1_15.geo.json
+│       ├── guatemala_zona1_15.solution.json
+│       ├── toy_10nodes.dzn
+│       ├── toy_rules_10nodes.dzn
+│       └── toy_rules_config.dzn
+├── experiments/
+│   ├── check_phase1.sh
+│   └── check_phase2.sh
+└── tests/
+    ├── test_geospatial.py
+    └── test_map_renderer.py
+```
+
+### 10.1. Archivos y Responsabilidades
+
+| Ruta | Responsabilidad |
+| :--- | :--- |
+| `models/hfvrptw_core.mzn` | Rutas con `subcircuit`, capacidad de muelles con `cumulative`, capacidades de vehículos y ventanas de tiempo. |
+| `models/hfvrptw_rules.mzn` | Componer el núcleo con las reglas opcionales de zonas y descansos. |
+| `models/rules/zone_restrictions.mzn` | Restringir la asignación de vehículos según la capacidad máxima permitida por zona. |
+| `models/rules/driver_breaks.mzn` | Incorporar pausas de conductores y su efecto en los horarios de ruta. |
+| `pyproject.toml` | Dependencias de Python, configuración del paquete y comando `routing-system`. |
+| `src/cli.py` | Comandos `build`, `solve` y `render` para construir instancias, resolverlas y generar mapas. |
+| `src/geo/osm_extractor.py` | Descargar y almacenar en caché la red vial dirigida de OpenStreetMap. |
+| `src/geo/matrix_builder.py` | Construir matrices asimétricas y exportar la instancia y sus metadatos geográficos. |
+| `src/solver/mzn_runner.py` | Ejecutar MiniZinc y extraer soluciones, rutas y estadísticas de compilación y resolución. |
+| `src/solver/routes.py` | Reconstruir y validar las rutas a partir de los sucesores del modelo. |
+| `src/viz/map_renderer.py` | Validar la solución y representar rutas, horarios y ocupación de muelles en HTML con Folium. |
+| `experiments/check_phase1.sh` | Verificar el núcleo sintético con Gecode, HiGHS y CP-SAT. |
+| `experiments/check_phase2.sh` | Verificar las reglas de zonas y descansos y su compatibilidad con el núcleo. |
+| `tests/test_geospatial.py` | Probar matrices viales, caché, validación de datos e integración con MiniZinc. |
+| `tests/test_map_renderer.py` | Probar la reconstrucción de calles, validación de soluciones y generación del mapa. |
+
+### 10.2. Organización de Datos
+
+| Directorio | Contenido |
+| :--- | :--- |
+| `data/raw/` | Coordenadas, demandas, ventanas horarias y definición de la flota de entrada. |
+| `data/cache/` | Grafos `.graphml` y respuestas de Overpass generados localmente, excluidos de Git salvo `.gitkeep`. |
+| `data/instances/` | Instancias `.json` o `.dzn`, metadatos geográficos `.geo.json` y resultados `.solution.json`. |
+| `data/maps/` | Mapas HTML operativos con calles, rutas y horarios. |
+
+La caché conserva el grafo original necesario para regenerar el mapa de una
+solución existente. El pipeline crea sus subdirectorios cuando los necesita.
