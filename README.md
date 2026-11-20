@@ -166,7 +166,7 @@ sintética ejecutable (fase 1), más reglas modulares de zonas y descansos
 operativo Folium (fase 4).
 Los `.gitkeep` conservan las carpetas reservadas. Los perfiles, la cadena de
 frío, el clustering y el contenedor siguen pendientes.
-Las secciones 9–12 describen la ejecución disponible.
+La sección 9 interpreta los resultados obtenidos.
 
 ```text
 routing-system/
@@ -267,8 +267,8 @@ cuando se implementen los modelos y se configuren los motores.
 
 ### 8.3. Guía de Uso
 
-Se puede ejecutar directamente MiniZinc como se indica en la sección 9 o usar
-el pipeline Python de la sección 11. Al implementar cada componente pendiente,
+Se puede ejecutar directamente MiniZinc o usar el pipeline Python mediante
+`src/cli.py`. Al implementar cada componente pendiente,
 su código se ubicará en la ruta prevista de la tabla y se podrá retirar el
 `.gitkeep` de esa carpeta cuando contenga archivos versionados.
 
@@ -280,435 +280,112 @@ El flujo de uso previsto es:
 4. Ejecutar el modelo central con las reglas y el perfil de solver seleccionados.
 5. Visualizar las rutas con Folium y comparar las métricas mediante `experiments/`.
 
-La sección 11 documenta instalación y CLI. La construcción del contenedor
-se documentará cuando exista `Dockerfile`.
+Las opciones de la CLI se consultan con `python -m src.cli --help`. La
+construcción del contenedor se documentará cuando exista `Dockerfile`.
 
-## 9. Fase 1: Núcleo Matemático con Datos Sintéticos
+## 9. Interpretación de los Resultados
 
-### 9.1. Alcance y Convenciones
+### 9.1. Calidad de la Solución y Uso de la Flota
 
-`models/hfvrptw_core.mzn` implementa rutas con `subcircuit`, cobertura única,
-capacidades heterogéneas, ventanas rígidas para el **inicio** del servicio,
-espera permitida y carga de vehículos mediante `cumulative`. Cada vehículo
-activo tiene un único ciclo que incluye el depósito; los nodos no asignados
-son bucles a sí mismos. Los vehículos inactivos no consumen muelles ni pagan
-costos. El objetivo es costo fijo de activación más distancia por tarifa de
-cada vehículo, con cotas enteras finitas para los tres motores.
+La [solución registrada](data/instances/guatemala_zona1_15.solution.json) para
+los 15 clientes de zona 1 de Guatemala tiene estado `OPTIMAL_SOLUTION` y costo
+**16.022**. El objetivo y su cota coinciden, por lo que CP-SAT demostró que no
+existe una solución de menor costo para esa instancia y las restricciones del
+núcleo. Este valor suma costos fijos de activación y costos de recorrido por
+metro; se expresa en unidades abstractas, no en quetzales.
 
-El depósito es el nodo **0** y los clientes son `1..n_customers`. Se conservan
-esos índices al construir el array de `subcircuit`. La salida ocurre al terminar
-la carga; salida y regreso tienen variables distintas para no imponer una
-precedencia temporal circular. La ventana del depósito contiene toda la carga
-y el regreso. `return_time` representa una hora factible de regreso y puede
-incluir espera; el objetivo no minimiza horarios. Los intervalos de ocupación
-de muelles son `[loading_start, departure)`.
+| Vehículo | Clientes atendidos | Carga utilizada | Distancia recorrida | Interpretación |
+| :--- | ---: | :--- | :--- | :--- |
+| 1 | 0 | Inactivo | — | El plan óptimo no necesita activar toda la flota disponible. |
+| 2 | 7 | 7/7 | 3,681 km | Utiliza toda su capacidad para atender el primer grupo de clientes. |
+| 3 | 8 | 8/8 | 5,960 km | Completa la cobertura con una ruta más larga y capacidad totalmente ocupada. |
 
-La instancia `data/instances/toy_10nodes.dzn` tiene **11 nodos: un depósito y
-10 clientes**, pese al nombre solicitado. Incluye dos muelles, tres vehículos
-con capacidades `[8, 9, 12]`, costos y duraciones de carga diferentes, y matrices
-asimétricas inventadas. Por simplicidad, distancia y tiempo tienen los mismos
-valores en esta instancia, pero son parámetros independientes del modelo.
-Los tiempos se expresan en minutos desde la apertura. Las ventanas estrechas
-facilitan una primera validación; este caso no mide escalabilidad.
+Los dos vehículos activos transportan las 15 unidades demandadas y recorren
+**9,641 km** en total. La combinación permite cubrir a todos los clientes con
+dos de los tres vehículos disponibles. La ocupación del 100 % de ambos vehículos
+indica que este plan no tiene capacidad libre para añadir demanda sin revisar
+la asignación o activar otro vehículo. El objetivo minimiza costo total, por lo
+que no implica por sí solo la menor distancia ni el menor número de vehículos.
 
-### 9.2. Ejecutar en MiniZinc IDE
-
-1. Abrir `models/hfvrptw_core.mzn` y `data/instances/toy_10nodes.dzn` en MiniZinc IDE.
-2. Mantener activo el `.mzn`, pulsar **Run** y seleccionar el `.dzn` cuando lo solicite.
-3. Configurar **un hilo** en las opciones de ejecución para reproducir la medición.
-4. Ejecutar cambiando el selector entre **Gecode**, **HiGHS** y **OR Tools CP-SAT**, con el mismo modelo y datos.
-5. Comprobar `total_cost = 247;` y el marcador `==========`, que indica óptimo demostrado. Los horarios pueden diferir entre solvers.
-
-No hacen falta archivos de perfil `.mpc` ni Python. Si el IDE no encuentra el
-motor, revisar su instalación y las configuraciones listadas por `minizinc --solvers`.
-
-### 9.3. Ejecutar y Verificar por Consola
-
-Con `minizinc` en el `PATH`:
-
-```sh
-minizinc --solver gecode --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
-minizinc --solver highs --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
-minizinc --solver cp-sat --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
-sh experiments/check_phase1.sh
-```
-
-En macOS puede usarse directamente el ejecutable incluido en el IDE:
-
-```sh
-MINIZINC=/Applications/MiniZincIDE.app/Contents/Resources/minizinc sh experiments/check_phase1.sh
-```
-
-El verificador requiere `sh`, `rg`, `awk`, `sed` y `/usr/bin/time`. Comprueba el
-mismo óptimo demostrado en los tres motores y un tiempo total de proceso menor
-a dos segundos por motor, incluyendo compilación y arranque. Además comprueba
-con Gecode que reducir la capacidad total a 28 (demanda 29) o los muelles a uno
-hace inviable esta instancia. Los datos modificados se crean temporalmente.
-
-### 9.4. Resultado de Validación
-
-Medición por consola el 19 de noviembre de 2026 en macOS ARM64, MiniZinc 2.11.0,
-un hilo por motor. El modelo y la instancia también se abrieron en el IDE;
-no se automatizó el selector de su interfaz gráfica.
-
-| Solver | Versión | Óptimo demostrado | Tiempo total de proceso |
-| :--- | :--- | ---: | ---: |
-| Gecode | 6.6.0 | 247 | 0,60 s |
-| HiGHS | 1.16.0 | 247 | 1,39 s |
-| OR-Tools CP-SAT | 9.15 | 247 | 0,24 s |
-
-Las rutas obtenidas fueron `0 → 1 → 2 → 3 → 4 → 0`,
-`0 → 5 → 6 → 7 → 0` y `0 → 8 → 9 → 10 → 0` para los vehículos 1, 2 y 3.
-Sus cargas son 8, 9 y 12; sus distancias, 26, 25 y 29. El costo se verifica como
-`20 + 30 + 40 + 3×26 + 2×25 + 1×29 = 247`.
-Un horario factible carga los vehículos en `[0,8)`, `[0,10)` y `[8,20)`:
-se ocupan como máximo dos muelles y los servicios pueden comenzar en las
-aperturas de las ventanas de todos los clientes.
-
-Los tiempos dependen del equipo, la carga y la configuración de hilos. Una
-medición preliminar con hilos predeterminados dio 2,93 s para HiGHS; por eso la
-configuración de un hilo forma parte de la reproducción del criterio. Este
-resultado no garantiza el umbral de dos segundos para otras instancias.
-
-## 10. Fase 2: Reglas Modulares de Negocio
-
-### 10.1. Composición y Activación
-
-`models/hfvrptw_rules.mzn` incluye el núcleo y los módulos de zonas y descansos.
-**`hfvrptw_core.mzn` permanece sin cambios** y sigue ejecutándose por separado.
-Los módulos no contienen su propio `solve` ni cambian la función objetivo.
-También se puede crear otro archivo de composición con el núcleo y únicamente
-el `include` de la regla deseada.
-
-| Módulo | Parámetro de activación | Datos o constantes |
-| :--- | :--- | :--- |
-| `rules/zone_restrictions.mzn` | `enable_zone_restrictions` | `zone_max_capacity[i]`, capacidad máxima del vehículo admitido en cada cliente. |
-| `rules/driver_breaks.mzn` | `enable_driver_breaks` | Constantes de negocio: `break_threshold = 240` y `break_duration = 30`, en minutos. |
-
-Los booleanos se suministran explícitamente mediante `-D` o en un `.dzn`.
-`toy_rules_config.dzn` aporta los límites por zona; se necesita incluso si la
-regla está apagada al usar el archivo de composición que incluye ambos módulos.
-No definir un mismo parámetro en dos archivos de datos.
-
-```sh
-# Ambas apagadas: óptimo 246 en la variante de fase 2.
-minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=false; enable_driver_breaks=false;'
-
-# Solo zonas: óptimo 253 y reasignación de las rutas.
-minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=false;'
-
-# Solo descansos: óptimo 246, con pausa en la ruta larga.
-minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=false; enable_driver_breaks=true;'
-
-# Ambas activadas: óptimo 253 y pausa en la ruta reasignada.
-minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=true;'
-```
-
-En el IDE, abrir `hfvrptw_rules.mzn`, seleccionar la instancia y el archivo de
-configuración, y proporcionar ambos booleanos como datos adicionales o mediante
-un tercer `.dzn`. Se pueden cambiar los motores igual que en la fase 1.
-
-### 10.2. Semántica de las Reglas
-
-**Zonas.** La capacidad del vehículo representa su tamaño: se prohíbe asignarlo
-a un cliente si `capacity[k] > zone_max_capacity[i]`. La igualdad está permitida.
-Un límite cero prohíbe todos los vehículos del núcleo, cuyas capacidades son
-positivas. Este módulo no modela peso real, placas ni zonas de tránsito intermedio.
-
-**Descansos.** Si el tiempo desde la salida hasta el regreso efectivo supera
-240 minutos, se exige una pausa continua de 30 minutos en un cliente visitado,
-inmediatamente después de su servicio. La pausa debe comenzar como máximo
-240 minutos después de la salida. Se añade su duración a la precedencia del
-siguiente viaje, incluido el regreso al depósito si es el último cliente.
-No puede solaparse con conducción ni servicio; puede aprovechar una espera
-antes de la siguiente ventana. También se permiten pausas en rutas cortas.
-
-El tiempo de ruta incluye conducción, servicio y espera; no incluye la carga
-inicial. Se modela una sola pausa por ruta, sin descansos recurrentes ni paradas
-en carretera. Son convenciones de esta fase, no un modelo de normativa laboral.
-
-`break_after[k]` identifica el cliente de la pausa, o cero si no hay pausa;
-`break_start[k]` indica su inicio. Con la regla activa, `route_finish[k]` calcula
-el regreso al terminar el último viaje, sin la holgura de `return_time[k]` del
-núcleo. Esto evita exigir una pausa solo porque el solver elija una hora de
-regreso artificialmente tardía. Con la regla apagada, `route_finish` muestra
-`return_time`; no se agregan las restricciones temporales de descansos.
-Los vehículos inactivos siempre tienen `break_after = 0`.
-
-### 10.3. Instancias y Resultados Esperados
-
-La instancia original conserva su óptimo **247** con ambas reglas apagadas o
-encendidas: ningún vehículo infringe la zona y ninguna ruta requiere cuatro
-horas. Para ejercitar cambios reales se añade `toy_rules_10nodes.dzn`, que
-conserva los diez clientes y las matrices, cambia capacidades a `[12, 9, 16]`,
-extiende el horizonte a 420 minutos y mueve la ventana del cliente 10 a
-`[300,304]`. La configuración limita a 12 la capacidad admitida en el cliente 8.
-
-| Zonas | Descansos | Óptimo | Efecto en la variante |
-| :--- | :--- | ---: | :--- |
-| Apagadas | Apagados | 246 | Vehículos 1, 2 y 3 atienden grupos 5–7, 1–4 y 8–10. |
-| Encendidas | Apagados | 253 | Vehículos 1 y 3 intercambian grupos: el vehículo 3 ya no puede visitar el cliente 8. |
-| Apagadas | Encendidos | 246 | El vehículo 3 incorpora una pausa, por ejemplo después del cliente 9. |
-| Encendidas | Encendidos | 253 | El vehículo 1 atiende 8–10 e incorpora la pausa. |
-
-Un horario factible con ambas reglas carga el vehículo 1 en `[10,18)` y atiende
-los clientes 8, 9 y 10 en los minutos 30, 55 y 300. Descansa tras el servicio del
-cliente 9, entre 60 y 90; luego viaja 5 minutos y espera hasta 300. Regresa en
-317. La espera absorbe la pausa, por lo que activar descansos no aumenta el costo.
-Los horarios y la ubicación de la pausa pueden variar entre soluciones óptimas.
-
-### 10.4. Verificación Reproducible
-
-```sh
-sh experiments/check_phase2.sh
-# macOS, si MiniZinc no está en PATH:
-MINIZINC=/Applications/MiniZincIDE.app/Contents/Resources/minizinc sh experiments/check_phase2.sh
-```
-
-El verificador usa las mismas herramientas de consola que el de fase 1.
-Ejecuta Gecode, HiGHS y OR-Tools CP-SAT con un hilo y hasta 60 segundos por caso.
-Comprueba los óptimos de la tabla, la regresión de la instancia original y
-contraejemplos que deben resultar inviables: vehículo prohibido, ruta larga
-sin pausa, pausa solapada con viaje y regreso antes de completar el descanso.
-También comprueba el umbral exacto de 240 minutos y un vehículo inactivo.
-Una ventana incompatible con el descanso debe producir inviabilidad, sin
-relajar la regla ni las ventanas del núcleo. Los casos se crean temporalmente.
-Esta fase valida modularidad y factibilidad; no impone el umbral de dos segundos
-a la instancia ampliada ni a sus pruebas de inviabilidad.
-
-Validación realizada con MiniZinc 2.11.0, Gecode 6.6.0, HiGHS 1.16.0 y
-OR-Tools CP-SAT 9.15: todos los casos de `check_phase2.sh` pasaron. También
-volvió a pasar `check_phase1.sh`, conservando el óptimo 247 y el umbral de dos
-segundos en esta ejecución. No se modificó el núcleo ni se añadió Python.
-
-## 11. Fase 3: Pipeline Geoespacial Real
-
-### 11.1. Instalación
-
-Desde la raíz del repositorio, usar Python 3.12 o posterior y una instalación
-independiente de MiniZinc con CP-SAT disponible:
-
-```sh
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -e .
-.venv/bin/routing-system --help
-```
-
-La instalación editable mantiene accesible `models/hfvrptw_core.mzn` desde el
-repositorio. El runner busca el ejecutable en `--minizinc`, en la variable
-`MINIZINC`, en el `PATH` y finalmente en la ubicación estándar de MiniZinc IDE
-para macOS. La librería `minizinc` de Python no instala los solvers.
-
-### 11.2. Descargar, Construir y Resolver
-
-```sh
-# Primera ejecución: requiere internet para consultar Overpass/OpenStreetMap.
-.venv/bin/python -m src.cli build data/raw/guatemala_zona1_15.json data/instances/guatemala_zona1_15.json
-
-# Usa MiniZinc Python y el núcleo existente; no requiere internet.
-.venv/bin/python -m src.cli solve data/instances/guatemala_zona1_15.json --solver cp-sat --time-limit 30 --output data/instances/guatemala_zona1_15.solution.json
-
-# El runner también se puede invocar directamente.
-.venv/bin/python -m src.solver.mzn_runner data/instances/guatemala_zona1_15.json --solver cp-sat --time-limit 30 --output /tmp/guatemala-solution.json
-```
-
-Tras instalar el proyecto, `routing-system build ...` y `routing-system solve ...`
-son equivalentes, activando el entorno virtual o usando `.venv/bin/routing-system`.
-Los comandos `solve` aceptan también `--solver gecode` o `--solver highs`; el
-resultado registrado en esta fase se verificó con CP-SAT. El runner usa un hilo
-y semilla cero, reporta estado, objetivo, rutas, horarios y estadísticas de
-compilación/resolución. `OPTIMAL_SOLUTION` demuestra optimalidad;
-`SATISFIED` con `optimal=false` indica una solución factible sin prueba de
-optimalidad. Si no encuentra solución, conserva el estado, no inventa rutas y
-el comando termina con código 2.
-
-La misma orden `build` reutiliza el GraphML existente sin llamadas de red.
-`--refresh` vuelve a descargar, y `--cache-dir` cambia la carpeta de caché.
-La clave de caché depende del bbox, tipo de red y configuración de estimación.
-Los GraphML y respuestas de Overpass se guardan en `data/cache/`, excluido de
-Git salvo `.gitkeep`. Conviene conservar el GraphML si se desea reconstruir
-exactamente la misma instancia: OSM puede cambiar entre descargas.
-
-### 11.3. Contratos y Cálculo de Matrices
-
-- `osm_extractor.py` descarga una red dirigida `drive` con OSMnx, conserva sus
-  sentidos de circulación, agrega velocidades y tiempos por arco y la guarda
-  atómicamente en GraphML. No convierte la red en un grafo no dirigido.
-- El archivo de entrada contiene `network_bbox` en orden **oeste, sur, este,
-  norte**, coordenadas WGS84 `lat`/`lon`, la flota y los datos operativos. El
-  primer elemento de `nodes` es el depósito; los siguientes son los clientes.
-  `data/raw/guatemala_zona1_15.json` sirve como ejemplo completo del formato.
-- `matrix_builder.py` asigna cada coordenada al nodo vial más cercano. Rechaza
-  puntos a más de 250 metros de la red por defecto, configurable con
-  `--max-snap-distance`. Rechaza demandas negativas, ventanas inválidas,
-  capacidades insuficientes y arcos sin pesos válidos.
-- Para cada origen ejecuta Dijkstra ponderado por `travel_time` en segundos.
-  Calcula cada destino de forma dirigida; nunca copia el triángulo opuesto.
-  Si un destino es inaccesible, falla indicando el par; se debe revisar la
-  coordenada o ampliar el bbox, sin reemplazarlo por distancia en línea recta.
-- La matriz `distance` usa metros enteros redondeados hacia arriba **sobre el
-  mismo camino de menor tiempo**, incluyendo la selección de arcos paralelos.
-  No mezcla distancia mínima de un camino con tiempo mínimo de otro.
-  `travel_time` convierte segundos a minutos redondeando hacia arriba por par
-  origen–destino. Los clientes que compartan nodo vial pueden tener costo y
-  tiempo cero entre sí; cada cliente conserva su demanda y servicio.
-- El JSON del modelo contiene únicamente sus parámetros, matrices rectangulares
-  y vectores. MiniZinc recibe el archivo directamente y aplica sus índices
-  declarados: depósito 0, clientes 1–15. No se modificó el núcleo matemático.
-
-El tiempo vial es una **estimación de flujo libre**, calculada a partir de
-`maxspeed` de OSM e imputación de OSMnx por tipo de vía, con 30 km/h como último
-valor de respaldo. No son mediciones de tráfico en vivo. El snapping aproxima
-el acceso a la calle: no suma el trayecto entre la coordenada y el nodo vial.
-Tampoco se incorporan demoras en cruces, restricciones de giro ni restricciones
-específicas de camiones. La [referencia oficial de OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html)
-describe estas funciones de velocidades, tiempos y nodos cercanos; la
-[API de MiniZinc Python](https://python.minizinc.dev/en/latest/api.html) describe
-la carga de JSON y la ejecución mediante `Model` e `Instance`.
-
-### 11.4. Artefactos y Resultado Verificado
-
-| Archivo | Contenido |
-| :--- | :--- |
-| `data/raw/guatemala_zona1_15.json` | Depósito y 15 coordenadas propuestas en zona 1, dos muelles y tres vehículos. Demandas, flota y ventanas sintéticas; no representa pedidos de comercios reales. |
-| `data/instances/guatemala_zona1_15.json` | Instancia MiniZinc de 16 nodos, con matrices viales reales y datos operativos de prueba. Se puede resolver sin red ni GraphML. |
-| `data/instances/guatemala_zona1_15.geo.json` | Coordenadas originales y ajustadas, ids OSM, errores de snapping, consulta, fecha, unidades, atribución y SHA-256 de entrada, instancia y caché. |
-| `data/instances/guatemala_zona1_15.solution.json` | Solución obtenida mediante MiniZinc Python, con estado, estadísticas y SHA-256 del archivo de instancia. |
-
-Los archivos `.geo.json` y `.solution.json` son metadatos y resultados; no se
-pasan como datos al núcleo. La red se descargó el **19 de noviembre de 2026**:
-660 nodos, 1.340 arcos dirigidos, 16 nodos viales distintos para las coordenadas
-y una distancia máxima de snapping de 76,44 m. Hay 116 pares no ordenados con
-distancia asimétrica y 41 con tiempo asimétrico después del redondeo a minutos.
-
-La validación en macOS ARM64 con Python 3.12, OSMnx 2.2.0, NetworkX 3.7,
-MiniZinc Python 0.10.0, MiniZinc 2.11.0 y CP-SAT 9.15 encontró
-**`OPTIMAL_SOLUTION`, objetivo 16.022**, en 2,65 segundos medidos por el runner
-(incluyendo compilación y resolución, excluyendo descarga y construcción de
-matrices). El límite configurado fue de 30 segundos. El vehículo 1 queda
-inactivo; los vehículos 2 y 3 transportan 7 y 8 unidades:
+Las rutas obtenidas son:
 
 - Vehículo 2: `0 → 1 → 2 → 3 → 7 → 6 → 5 → 4 → 0`.
 - Vehículo 3: `0 → 8 → 9 → 11 → 10 → 13 → 15 → 14 → 12 → 0`.
 
-El costo usa las unidades abstractas declaradas en el ejemplo y tarifas por
-metro; no representa quetzales ni una cotización logística. Los tiempos de
-proceso dependen del equipo y del estado de OSM al regenerar los datos.
+El nodo `0` representa el depósito. Las distancias se calculan sobre caminos
+dirigidos de la red vial: el sentido de circulación puede hacer que ir de un
+cliente a otro tenga un costo distinto al recorrido inverso.
+
+### 9.2. Cumplimiento Horario y Capacidad del Depósito
+
+El [mapa operativo](data/maps/guatemala_zona1_15.html) muestra **15/15 servicios
+iniciados dentro de su ventana horaria**. Llegar antes de la apertura es factible
+si el vehículo espera; el cumplimiento se evalúa sobre el inicio del servicio.
+Por eso una espera no representa necesariamente una ineficiencia evitable:
+puede ser necesaria para coordinar la ruta con las ventanas de los clientes.
+
+Tomando las 08:00 como minuto cero, el vehículo 2 ocupa un muelle de 08:00 a
+08:07 y el vehículo 3 ocupa otro de 08:00 a 08:09. El pico de ocupación es
+**2/2 muelles**, compatible con la capacidad del depósito. Ambos pueden cargar
+simultáneamente en este plan; esto no demuestra que dos muelles sean
+indispensables, pues habría que resolver nuevamente con uno para medir el efecto.
+La asignación visual de cada muelle la realiza el renderer a partir de los
+intervalos, no el solver.
+
+Los regresos estimados son a las **09:00** y **10:03**, respectivamente. El
+segundo recorrido combina más clientes y mayor distancia, pero su duración
+también incluye servicio y posibles esperas. Los horarios no se minimizan en
+la función objetivo: distintas soluciones de igual costo pueden tener horarios
+diferentes. Además, `return_time` admite holgura; para interpretar la operación
+conviene usar el regreso estimado al completar el último trayecto.
+
+### 9.3. Efecto de las Reglas de Negocio
+
+Los casos sintéticos permiten aislar el efecto de las restricciones de zonas
+y descansos en la variante `toy_rules_10nodes.dzn`:
+
+| Restricciones activas | Costo óptimo | Interpretación |
+| :--- | ---: | :--- |
+| Ninguna | 246 | Referencia para comparar las reglas sobre la misma instancia. |
+| Zonas | 253 | La prohibición de acceso obliga a reasignar clientes entre vehículos. |
+| Descansos | 246 | La pausa puede encajar en una espera sin aumentar el costo de recorrido. |
+| Zonas y descansos | 253 | Se modifica la asignación y se incorpora la pausa, conservando el costo del caso con zonas. |
+
+La restricción de zonas aumenta el costo en **7 unidades, aproximadamente
+2,85 %**, respecto de la referencia. Este incremento cuantifica el costo de
+cumplir esa regla en el ejemplo. Que el descanso no cambie el objetivo no
+significa que carezca de efecto: modifica el horario y exige reservar una pausa
+factible. En este caso, la espera antes de una ventana tardía permite absorberla.
+
+La instancia sintética original `toy_10nodes.dzn` conserva el óptimo **247**
+con las reglas activadas o desactivadas porque no fuerza esos conflictos. Sus
+costos no deben compararse directamente con los 246 de la variante, que cambia
+capacidades y ventanas, ni con los 16.022 del caso geoespacial, que usa otras
+matrices y escalas de distancia.
+
+### 9.4. Rendimiento y Alcance de las Conclusiones
+
+La ejecución geoespacial registrada con CP-SAT 9.15 tardó **2,65 segundos** en
+el runner, incluyendo compilación y resolución. Las estadísticas reportan
+aproximadamente **0,069 segundos de compilación a FlatZinc** y **2,48 segundos
+de resolución**; el resto corresponde a otras tareas de ejecución. La descarga
+de OpenStreetMap y la construcción de matrices quedan fuera de esa medición.
+En este caso, la búsqueda concentra la mayor parte del tiempo.
+
+El resultado demuestra que el modelo puede resolver esta instancia pequeña
+con optimalidad probada. No permite concluir qué solver es superior ni que el
+mismo rendimiento se mantenga con 50 o 100 clientes: faltan mediciones comparables
+por tamaño, motor y límite de tiempo. Un estado `SATISFIED` con `optimal=false`
+indicaría una solución factible sin prueba de optimalidad; debe distinguirse
+del estado óptimo registrado aquí.
+
+La red vial procede de OpenStreetMap, pero las demandas, ventanas y flota son
+sintéticas. Los tiempos estiman circulación en flujo libre y no incorporan
+tráfico en vivo, demoras en cruces ni el acceso desde cada coordenada al nodo
+vial ajustado. El mapa geoespacial corresponde al núcleo y no incorpora las
+reglas adicionales de descansos y zonas. Por tanto, la solución es óptima para
+los datos y supuestos modelados; su uso operativo requiere validar esos datos
+y condiciones con la operación real.
 
 Fuente de la red: **© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)**,
 [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
-La atribución y procedencia también se conservan en el GraphML y el `.geo.json`.
-
-### 11.5. Pruebas
-
-```sh
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-Las pruebas funcionan sin red y comprueban caminos dirigidos y arcos paralelos,
-coherencia entre distancia y tiempo, caché GraphML y actualización explícita,
-coordenadas alejadas, nodos inaccesibles, validación de datos y serialización.
-También ejecutan MiniZinc Python sobre un grafo pequeño con óptimo conocido y
-una instancia inviable; estas dos pruebas se omiten si MiniZinc no está instalado
-en el PATH o su ubicación estándar de macOS. Una comprobación independiente
-verifica la solución real guardada: cobertura de los 15 clientes, capacidades,
-ventanas, tiempos de recorrido, ocupación de muelles, costo y hashes de la
-instancia. La descarga real y la reconstrucción posterior desde caché se
-verificaron durante la implementación.
-
-## 12. Fase 4: Visualización Operativa con Folium
-
-### 12.1. Generar y Abrir el Mapa
-
-Desde la raíz del repositorio y con las dependencias de la sección 11 instaladas:
-
-```sh
-.venv/bin/python -m src.cli render data/instances/guatemala_zona1_15.json data/instances/guatemala_zona1_15.solution.json data/maps/guatemala_zona1_15.html --start-time 08:00
-
-# macOS: abrir el HTML en el navegador predeterminado.
-open data/maps/guatemala_zona1_15.html
-```
-
-También se puede usar `.venv/bin/routing-system render ...`. El renderer utiliza
-por defecto `instance.geo.json` y el GraphML indicado en sus metadatos. Las
-opciones `--geo` y `--graph` permiten indicar esas rutas explícitamente.
-`--start-time` establece la hora equivalente al minuto cero del modelo: 08:00
-es una convención visual configurable, no una hora tomada de OpenStreetMap.
-
-El HTML generado incluye las calles del grafo original como fondo y no solicita
-teselas externas. Folium carga Leaflet y sus librerías de presentación desde CDN:
-la primera apertura necesita acceso a esos recursos; no es un paquete totalmente
-autocontenido para uso sin conexión. La generación desde GraphML no consulta
-OpenStreetMap, no ejecuta de nuevo el solver ni requiere red.
-
-Para generar un mapa nuevo se necesita conservar el **GraphML original**. Si
-la caché no está disponible, se debe reconstruir el pipeline de fase 3 y volver
-a resolver la nueva instancia. No se sustituye silenciosamente la red por una
-descarga actual que podría tener otras calles o sentidos. El HTML ya generado
-no necesita los archivos JSON ni GraphML para abrirse.
-
-### 12.2. Lectura de la Vista Operativa
-
-- Cada vehículo activo tiene su color y una capa independiente, activable en
-  el control superior derecho. Los inactivos se identifican en el panel.
-- Las líneas siguen la geometría de las calles, no segmentos rectos entre
-  clientes. Las flechas indican el sentido de recorrido de cada arco dirigido.
-  Al pasar por una flecha se consulta la calle, el sentido y los extremos OSM;
-  las calles de fondo también muestran nombre y sentido al pasar el cursor.
-- Los marcadores `V2·1`, `V2·2`, etc. indican vehículo y orden de visita. Un clic
-  muestra llegada estimada, inicio de servicio, ventana y espera. El panel
-  conserva esa información por vehículo, junto con carga, distancia, salida y
-  regreso estimado. Se puede hacer zoom y desplazar el mapa.
-- La llegada estimada se calcula viajando inmediatamente después de terminar
-  el servicio anterior, usando los minutos redondeados de la instancia. El
-  vehículo puede llegar **antes** de la apertura y esperar: la condición del
-  modelo es iniciar el servicio dentro de la ventana. Las dos horas se muestran
-  por separado para no confundir llegada temprana con incumplimiento.
-- En el depósito, el diagrama muestra los intervalos `[inicio de carga, salida)`
-  con colores de vehículo y el pico de ocupación. `cumulative` no decide ids de
-  muelle: el renderer asigna los intervalos a muelles disponibles de forma
-  compatible con el plan. No atribuye al solver una asignación que no produjo.
-
-El regreso mostrado en el resumen es la llegada estimada al terminar el último
-viaje. Puede ser anterior a `return_time`, que en el núcleo admite holgura.
-La vista corresponde al núcleo de fase 3; no reconstruye descansos de módulos
-adicionales ni incorpora tráfico en vivo, cruces o tiempos de acceso desde el
-punto original hasta el nodo vial ajustado.
-
-### 12.3. Reconstrucción y Comprobaciones
-
-`src/solver/routes.py` convierte los sucesores en rutas y se reutiliza tanto en
-el runner como en el renderer. Este último vuelve a leer `successor`, sin fiarse
-del campo redundante `routes`: exige regreso al depósito, cobertura única y
-bucles propios en los nodos excluidos de cada vehículo.
-
-`src/viz/map_renderer.py` ejecuta el mismo Dijkstra por origen y la misma
-selección de arcos paralelos que `matrix_builder.py`, sobre el GraphML original.
-Para cada tramo recupera la geometría completa y la orienta desde el origen
-hacia el destino. Comprueba que metros y minutos coincidan con la matriz.
-Antes de dibujar valida los SHA-256 de instancia, solución y grafo, cobertura,
-capacidad, precedencias, ventanas, carga, regreso, ocupación de muelles y costo.
-Un archivo desactualizado o un plan inválido produce un error; no se dibuja
-como si estuviera verificado.
-
-El mapa de ejemplo conserva el óptimo 16.022 y muestra **15/15 servicios dentro
-de ventana**, dos vehículos activos y ocupación máxima **2/2**:
-
-| Vehículo | Carga | Distancia | Carga en depósito | Regreso estimado |
-| :--- | ---: | ---: | :--- | :--- |
-| 1 | Inactivo | — | — | — |
-| 2 | 7/7 | 3,681 km | 08:00–08:07, muelle visual M1 | 09:00 |
-| 3 | 8/8 | 5,960 km | 08:00–08:09, muelle visual M2 | 10:03 |
-
-### 12.4. Validación
-
-```sh
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-Las 16 pruebas de fases 3 y 4 incluyen geometría de calle almacenada al revés,
-selección del arco paralelo más rápido, sucesores inválidos, espera antes del
-servicio, regreso imposible, exceso de muelles, liberación y reutilización de
-un muelle en el mismo minuto, integridad de archivos y etiquetas HTML seguras.
-El HTML del ejemplo se abrió y se inspeccionó en Firefox en vistas de escritorio
-y móvil. El núcleo MiniZinc no cambió y el runner conserva su comportamiento.
