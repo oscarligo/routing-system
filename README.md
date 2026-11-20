@@ -1,5 +1,4 @@
 # Optimización Logística mediante Programación por Restricciones (HFVRPTW-C)
-
 Repositorio: [oscarligo/routing-system](https://github.com/oscarligo/routing-system).
 Código fuente: [modelos MiniZinc](https://github.com/oscarligo/routing-system/tree/main/models),
 [instancias de datos](https://github.com/oscarligo/routing-system/tree/main/data/instances) y
@@ -142,47 +141,24 @@ MiniZinc compila el modelo abstracto `.mzn` junto con los datos `.dzn` a una rep
 
 ### 7.2. Ejecución Independiente y Lectura de Salidas
 
-Estos ejemplos requieren **MiniZinc y el solver Gecode instalado**. No requieren
-Python, el entorno virtual, acceso a OpenStreetMap ni los archivos del pipeline
-geoespacial. `subcircuit.mzn` y `cumulative.mzn` pertenecen a la biblioteca
-estándar de MiniZinc y no deben copiarse desde este repositorio.
+Requiere MiniZinc con Gecode. No necesita Python ni conexión a internet.
+Conservar las rutas relativas de los modelos; `subcircuit.mzn` y `cumulative.mzn`
+vienen con MiniZinc.
 
 #### Archivos exactos requeridos
 
-Para ejecutar **solo el núcleo sintético**, bastan estos dos archivos:
+| Archivo original | Núcleo | Con reglas |
+| :--- | :---: | :---: |
+| [hfvrptw_core.mzn](models/hfvrptw_core.mzn) | Sí | Sí |
+| [hfvrptw_rules.mzn](models/hfvrptw_rules.mzn) | — | Sí |
+| [zone_restrictions.mzn](models/rules/zone_restrictions.mzn) | — | Sí |
+| [driver_breaks.mzn](models/rules/driver_breaks.mzn) | — | Sí |
+| [toy_10nodes.dzn](data/instances/toy_10nodes.dzn) | Sí | — |
+| [toy_rules_10nodes.dzn](data/instances/toy_rules_10nodes.dzn) | — | Sí |
+| [toy_rules_config.dzn](data/instances/toy_rules_config.dzn) | — | Sí |
 
-```text
-models/hfvrptw_core.mzn
-data/instances/toy_10nodes.dzn
-```
-
-Para ejecutar **el modelo con zonas y descansos**, se requieren estos seis
-archivos, conservando las rutas relativas entre los `.mzn`:
-
-```text
-models/hfvrptw_rules.mzn
-models/hfvrptw_core.mzn
-models/rules/zone_restrictions.mzn
-models/rules/driver_breaks.mzn
-data/instances/toy_rules_10nodes.dzn
-data/instances/toy_rules_config.dzn
-```
-
-`hfvrptw_rules.mzn` incluye el núcleo y ambos módulos. Los módulos de reglas
-no se ejecutan por separado. `toy_rules_config.dzn` define los límites por zona
-y se requiere incluso si se desactiva esa regla. Los dos booleanos de activación
-se proporcionan con `-D` en el comando; no están definidos en esos datos.
-No hay que agregar `toy_10nodes.dzn` al caso con reglas, pues duplicaría parámetros.
-
-Los archivos originales están disponibles en el repositorio:
-
-- [Núcleo: hfvrptw_core.mzn](models/hfvrptw_core.mzn).
-- [Composición: hfvrptw_rules.mzn](models/hfvrptw_rules.mzn).
-- [Regla de zonas: zone_restrictions.mzn](models/rules/zone_restrictions.mzn).
-- [Regla de descansos: driver_breaks.mzn](models/rules/driver_breaks.mzn).
-- [Instancia del núcleo: toy_10nodes.dzn](data/instances/toy_10nodes.dzn).
-- [Instancia con reglas: toy_rules_10nodes.dzn](data/instances/toy_rules_10nodes.dzn).
-- [Configuración: toy_rules_config.dzn](data/instances/toy_rules_config.dzn).
+El caso con reglas necesita los seis archivos indicados, incluso al desactivar
+reglas. No combinar las dos instancias: definen los mismos parámetros.
 
 #### Ejecutar el núcleo y consultar su salida
 
@@ -192,11 +168,7 @@ Desde la raíz del repositorio:
 minizinc --solver gecode --parallel 1 models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn
 ```
 
-Si MiniZinc IDE está instalado en macOS pero `minizinc` no está en el `PATH`,
-se puede reemplazar el ejecutable por
-`/Applications/MiniZincIDE.app/Contents/Resources/minizinc`.
-En el IDE, abrir el modelo y el archivo de datos, seleccionar Gecode y ejecutar
-el modelo con ese `.dzn`.
+En MiniZinc IDE, abrir el `.mzn`, seleccionar su `.dzn` y ejecutar con Gecode.
 
 Ejemplo de salida obtenido con Gecode:
 
@@ -246,13 +218,9 @@ Desde la raíz del repositorio, activar ambas reglas:
 minizinc --solver gecode --parallel 1 models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=true;'
 ```
 
-Cambiar cada booleano a `false` permite desactivar su regla. En el IDE,
-seleccionar los dos `.dzn` y proporcionar ambos booleanos como datos adicionales;
-si se prefiere un archivo, crear un tercer `.dzn` con esas dos asignaciones y
-seleccionarlo junto con los otros dos.
-
-Además de los campos del núcleo, esta ejecución imprime los siguientes campos.
-Extracto de la salida obtenida con ambas reglas activadas:
+Usar `false` para desactivar cada regla. En el IDE, seleccionar los dos `.dzn`
+y proporcionar ambos booleanos como datos adicionales o en un tercer `.dzn`.
+Extracto de salida con ambas reglas activas:
 
 ```text
 total_cost = 253;
@@ -270,24 +238,33 @@ hasta el 90. Con descansos activos, `route_finish` calcula el regreso al termina
 el último viaje, incluyendo la pausa si corresponde; con la regla apagada
 coincide con `return_time`.
 
-#### Reconocer el estado y guardar resultados
+#### Estado de la ejecución
 
-`----------` separa soluciones y `==========` confirma que se demostró el
-óptimo. Pueden aparecer varias soluciones de costo decreciente; debe consultarse
-la última. Los horarios pueden variar entre ejecuciones o solvers aun cuando
-el costo óptimo sea el mismo. `=====UNSATISFIABLE=====` indica que no existe
-solución factible y `=====UNKNOWN=====` que no se pudo determinar el resultado.
-Si se alcanza un límite de tiempo después de encontrar una solución, su costo
-no debe considerarse óptimo sin el marcador de optimalidad.
+`----------` separa soluciones; la última es la mejor encontrada y `==========`
+confirma optimalidad. `=====UNSATISFIABLE=====` indica inviabilidad y
+`=====UNKNOWN=====` un resultado indeterminado. Sin prueba de optimalidad,
+una solución encontrada antes del límite de tiempo solo garantiza factibilidad.
+Los horarios pueden variar entre soluciones de igual costo.
 
-Para guardar la salida textual y añadir estadísticas:
+La salida es texto; agregar `--statistics` para métricas y `> resultado.txt`
+para guardarla. Los mapas y archivos `.solution.json` se generan con Python.
+
+### 7.3. Ejecución con Docker Compose
+
+Requiere Docker con Compose v2. Desde la raíz del repositorio:
 
 ```sh
-minizinc --solver gecode --parallel 1 --statistics models/hfvrptw_core.mzn data/instances/toy_10nodes.dzn > /tmp/toy_10nodes.out
+docker compose build
+docker compose run --rm minizinc
+
+# Opcional: ejecutar con zonas y descansos (óptimo 253).
+docker compose run --rm minizinc --solver gecode models/hfvrptw_rules.mzn data/instances/toy_rules_10nodes.dzn data/instances/toy_rules_config.dzn -D 'enable_zone_restrictions=true; enable_driver_breaks=true;'
 ```
 
-La salida directa es texto: no genera por sí sola los archivos `.solution.json`,
-los mapas HTML ni los metadatos geográficos del pipeline Python.
+El comando predeterminado resuelve el núcleo con Gecode (óptimo **247**).
+[compose.yaml](compose.yaml) comparte la imagen del [Dockerfile](Dockerfile)
+entre MiniZinc y Python y conserva los datos en `./data`. Incluye MiniZinc
+2.11.0 y Python 3.12; la primera construcción requiere internet.
 
 ## 8. Interpretación de los Resultados de MiniZinc
 
@@ -344,19 +321,10 @@ El proyecto adopta un enfoque desacoplado en dos capas principales:
     +--------------+   +--------------+   +--------------+
 ```
 
-### 9.2. Guía de Uso del Pipeline
+### 9.2. Flujo del Pipeline
 
-Se puede ejecutar MiniZinc directamente sobre los modelos y datos sintéticos,
-o usar el pipeline Python mediante `src/cli.py`. El flujo geoespacial es:
-
-1. Preparar coordenadas, demandas, ventanas y flota en `data/raw/`.
-2. Ejecutar `build` para descargar o reutilizar la red vial y exportar las matrices y metadatos a `data/instances/`.
-3. Ejecutar `solve` para resolver la instancia con el motor seleccionado y guardar la solución.
-4. Ejecutar `render` para generar el mapa en `data/maps/` usando la solución y el grafo original.
-
-Las opciones se consultan con `python -m src.cli --help` y con `--help` en cada
-subcomando. Los scripts de `experiments/` verifican los casos sintéticos con y
-sin reglas adicionales.
+`build` prepara la red vial y las matrices; `solve` obtiene la solución y
+`render` genera el mapa. Los comandos con Compose están en la sección 9.6.
 
 ### 9.3. Calidad de la Solución y Uso de la Flota
 
@@ -390,6 +358,8 @@ dirigidos de la red vial: el sentido de circulación puede hacer que ir de un
 cliente a otro tenga un costo distinto al recorrido inverso.
 
 ### 9.4. Cumplimiento Horario y Capacidad del Depósito
+
+![Vista del mapa operativo generado en HTML](demo.png)
 
 El [mapa operativo](data/maps/guatemala_zona1_15.html) muestra **15/15 servicios
 iniciados dentro de su ventana horaria**. Llegar antes de la apertura es factible
@@ -441,6 +411,35 @@ Fuente de la red: **© [OpenStreetMap contributors](https://www.openstreetmap.or
 
 ---
 
+### 9.6. Ejecución con Docker Compose
+
+Después de `docker compose build`, ejecutar en este orden:
+
+```sh
+# Construir la instancia y conservar la red en caché.
+docker compose run --rm python build data/raw/guatemala_zona1_15.json data/instances/guatemala_zona1_15.json
+
+# Resolver y guardar la solución.
+docker compose run --rm python solve data/instances/guatemala_zona1_15.json --output data/instances/guatemala_zona1_15.solution.json
+
+# Generar el mapa HTML.
+docker compose run --rm python render data/instances/guatemala_zona1_15.json data/instances/guatemala_zona1_15.solution.json data/maps/guatemala_zona1_15.html
+```
+
+Los resultados quedan en `data/`. `solve` usa CP-SAT y un límite de 30 segundos
+por defecto, y puede usar directamente la instancia incluida. `render` requiere
+el GraphML original; si falta, ejecutar la secuencia completa. Solo `build`
+necesita internet cuando la red no está en caché.
+
+Ayuda y pruebas:
+
+```sh
+docker compose run --rm python --help
+docker compose run --rm --entrypoint python python -m unittest discover -s tests -v
+```
+
+---
+
 ## 10. Estructura del Repositorio
 
 El repositorio contiene el núcleo MiniZinc, reglas modulares de zonas y
@@ -452,6 +451,9 @@ el entorno virtual, los archivos temporales y las cachés generadas.
 routing-system/
 ├── README.md
 ├── .gitignore
+├── .dockerignore
+├── Dockerfile
+├── compose.yaml
 ├── pyproject.toml
 ├── models/
 │   ├── hfvrptw_core.mzn
@@ -503,6 +505,9 @@ routing-system/
 | `models/hfvrptw_rules.mzn` | Componer el núcleo con las reglas opcionales de zonas y descansos. |
 | `models/rules/zone_restrictions.mzn` | Restringir la asignación de vehículos según la capacidad máxima permitida por zona. |
 | `models/rules/driver_breaks.mzn` | Incorporar pausas de conductores y su efecto en los horarios de ruta. |
+| `compose.yaml` | Servicios MiniZinc y Python con imagen compartida y persistencia en `data/`. |
+| `Dockerfile` | Construir el entorno con MiniZinc, solvers y dependencias Python. |
+| `.dockerignore` | Excluir archivos locales y datos generados del contexto de construcción. |
 | `pyproject.toml` | Dependencias de Python, configuración del paquete y comando `routing-system`. |
 | `src/cli.py` | Comandos `build`, `solve` y `render` para construir instancias, resolverlas y generar mapas. |
 | `src/geo/osm_extractor.py` | Descargar y almacenar en caché la red vial dirigida de OpenStreetMap. |

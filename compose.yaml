@@ -1,0 +1,20 @@
+services:
+  minizinc:
+    build: .
+    image: routing-system:local
+    entrypoint: ["minizinc"]
+    command:
+      - --solver
+      - gecode
+      - models/hfvrptw_core.mzn
+      - data/instances/toy_10nodes.dzn
+    volumes:
+      - ./data:/app/data
+
+  python:
+    build: .
+    image: routing-system:local
+    entrypoint: ["python", "-m", "src.cli"]
+    command: ["--help"]
+    volumes:
+      - ./data:/app/data
