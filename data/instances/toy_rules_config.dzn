@@ -1,2 +1,7 @@
-% Node 8 is inaccessible to vehicles whose capacity exceeds 12.
+% Configuracion compartida por las instancias sinteticas con reglas.
+% Requiere hfvrptw_rules.mzn y un unico archivo de instancia .dzn.
+% Un limite por cliente 1..10, sin columna para el deposito.
+% El cliente 8 no admite vehiculos de capacidad mayor que 12.
+% Los indicadores enable_zone_restrictions y enable_driver_breaks se pasan
+% aparte con -D o en otro .dzn, incluso cuando una regla se desactiva.
 zone_max_capacity = [16, 16, 16, 16, 16, 16, 16, 12, 16, 16];

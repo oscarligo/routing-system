@@ -1,18 +1,23 @@
-% Despite the historical filename: 10 customers PLUS depot 0 = 11 nodes.
-% Times in minutes from opening; distances in synthetic distance units.
+% Instancia del nucleo: 10 clientes mas el deposito 0 = 11 nodos.
+% Ejecutar con models/hfvrptw_core.mzn; costo optimo esperado: 247.
+% Tiempos en minutos desde apertura; distancias y costos en unidades sinteticas.
+% Vectores de nodos: deposito primero; vectores de flota: vehiculos 1, 2 y 3.
 n_customers = 10;
 n_vehicles = 3;
 n_docks = 2;
 horizon = 180;
+% Demanda por nodo y parametros de capacidad/costo/carga de cada vehiculo.
 demand = array1d(0..10, [0, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4]);
 capacity = [8, 9, 12];
 fixed_cost = [20, 30, 40];
 distance_cost = [3, 2, 1];
 loading_duration = [8, 10, 12];
+% Ventanas para INICIAR servicio y duracion de servicio por nodo.
 earliest = array1d(0..10, [0, 20, 35, 50, 65, 22, 42, 62, 30, 55, 80]);
 latest = array1d(0..10, [180, 24, 39, 54, 69, 26, 46, 66, 34, 59, 84]);
 service = array1d(0..10, [0, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5]);
-% Three geographic groups; intergroup travel remains possible but expensive.
+% Matrices por filas de origen y columnas de destino, en orden 0..10.
+% Tres grupos geograficos; viajar entre grupos es posible pero costoso.
 distance = array2d(0..10, 0..10, [
  0, 5, 7, 9,11, 6, 8,10, 7, 9,11,
  6, 0, 3, 5, 7,21,23,25,24,26,28,
@@ -25,6 +30,7 @@ distance = array2d(0..10, 0..10, [
  8,25,23,21,23,24,22,24, 0, 5, 9,
 10,27,25,23,25,26,24,26, 6, 0, 5,
 12,29,27,25,27,28,26,28,10, 6, 0 ]);
+% En estos datos tiempo y distancia coinciden; el modelo los trata por separado.
 travel_time = array2d(0..10, 0..10, [
  0, 5, 7, 9,11, 6, 8,10, 7, 9,11,
  6, 0, 3, 5, 7,21,23,25,24,26,28,
