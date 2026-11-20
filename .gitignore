@@ -7,3 +7,5 @@ dist/
 .pytest_cache/
 data/cache/*
 !data/cache/.gitkeep
+
+.DS_Store
